@@ -102,7 +102,6 @@ function PasswordGate({ onAuth }: { onAuth: (password: string) => void }) {
         headers: { "x-admin-password": input },
       });
       if (res.ok || res.status === 200) {
-        sessionStorage.setItem("sw-admin-pw", input);
         onAuth(input);
       } else if (res.status === 401) {
         setError("Incorrect password.");
@@ -475,9 +474,7 @@ function Dashboard({ password }: { password: string }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminReview() {
-  const [password, setPassword] = useState<string | null>(() => {
-    return sessionStorage.getItem("sw-admin-pw");
-  });
+  const [password, setPassword] = useState<string | null>(null);
 
   if (!password) {
     return (

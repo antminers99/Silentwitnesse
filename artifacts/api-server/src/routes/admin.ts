@@ -1,26 +1,100 @@
 import { Router } from "express";
 import { eq, desc, sql } from "drizzle-orm";
+import crypto from "crypto";
 import { db, witnessRecordsTable, reviewActionsTable } from "@workspace/db";
 import type { Request, Response, NextFunction } from "express";
 
 const router = Router();
 
+// ── Brute-force protection ────────────────────────────────────────────────────
+// Max 5 failed attempts per IP in a 15-minute window before a 15-min lockout.
+
+const BRUTE_MAX = 5;
+const BRUTE_WINDOW_MS = 15 * 60 * 1000;
+
+interface BruteEntry { failures: number; windowStart: number; lockedUntil: number }
+const bruteMap = new Map<string, BruteEntry>();
+
+function getClientIp(req: Request): string {
+  return (
+    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+    req.ip ||
+    "unknown"
+  );
+}
+
+function checkBrute(ip: string): { blocked: boolean; remaining: number } {
+  const now = Date.now();
+  const entry = bruteMap.get(ip);
+  if (!entry) return { blocked: false, remaining: BRUTE_MAX };
+  if (now < entry.lockedUntil) return { blocked: true, remaining: 0 };
+  if (now - entry.windowStart > BRUTE_WINDOW_MS) {
+    bruteMap.delete(ip);
+    return { blocked: false, remaining: BRUTE_MAX };
+  }
+  return { blocked: false, remaining: Math.max(0, BRUTE_MAX - entry.failures) };
+}
+
+function recordFailure(ip: string): void {
+  const now = Date.now();
+  const entry = bruteMap.get(ip);
+  if (!entry || now - entry.windowStart > BRUTE_WINDOW_MS) {
+    bruteMap.set(ip, { failures: 1, windowStart: now, lockedUntil: 0 });
+    return;
+  }
+  entry.failures += 1;
+  if (entry.failures >= BRUTE_MAX) {
+    entry.lockedUntil = now + BRUTE_WINDOW_MS;
+  }
+}
+
+function clearFailures(ip: string): void {
+  bruteMap.delete(ip);
+}
+
 // ── Auth middleware ───────────────────────────────────────────────────────────
 
 function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
-  const password = process.env["ADMIN_REVIEW_PASSWORD"];
-  if (!password) {
+  const configuredPassword = process.env["ADMIN_REVIEW_PASSWORD"];
+  if (!configuredPassword) {
     res.status(503).json({
       error:
         "Admin review is not configured on this server. Set ADMIN_REVIEW_PASSWORD environment variable.",
     });
     return;
   }
+
+  const ip = getClientIp(req);
+  const brute = checkBrute(ip);
+  if (brute.blocked) {
+    res.status(429).json({ error: "Too many failed attempts. Try again in 15 minutes." });
+    return;
+  }
+
   const provided = req.headers["x-admin-password"];
-  if (!provided || provided !== password) {
+  if (!provided || typeof provided !== "string") {
+    recordFailure(ip);
     res.status(401).json({ error: "Unauthorized." });
     return;
   }
+
+  // Use timingSafeEqual to prevent timing attacks
+  let valid = false;
+  try {
+    const a = Buffer.from(provided);
+    const b = Buffer.from(configuredPassword);
+    valid = a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch {
+    valid = false;
+  }
+
+  if (!valid) {
+    recordFailure(ip);
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
+
+  clearFailures(ip);
   next();
 }
 

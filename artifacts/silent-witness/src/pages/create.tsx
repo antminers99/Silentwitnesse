@@ -58,10 +58,10 @@ interface FileHashEntry {
     durationBucket?: string;
     resolutionBucket?: string;
     fileSizeBucket?: string;
-    wordCount?: number;
+    textWordCount?: number;
     language?: string;
-    gpsMetadata?: "present" | "absent" | "unknown";
-    exifMetadata?: "present" | "absent" | "unknown";
+    gpsMetadataDetected?: "yes" | "no";
+    exifMetadataDetected?: "yes" | "no";
   };
 }
 
@@ -159,10 +159,10 @@ export default function CreateRecord() {
           try {
             const exifr = await import("exifr");
             const exif = await exifr.parse(file, { gps: true, tiff: true });
-            descriptor.gpsMetadata = !!(exif?.latitude || exif?.longitude || exif?.GPSLatitude)
-              ? "present"
-              : "absent";
-            descriptor.exifMetadata = "present";
+            descriptor.gpsMetadataDetected = !!(exif?.latitude || exif?.longitude || exif?.GPSLatitude)
+              ? "yes"
+              : "no";
+            descriptor.exifMetadataDetected = "yes";
             const img = new Image();
             img.src = URL.createObjectURL(file);
             await new Promise((res) => {
@@ -173,8 +173,7 @@ export default function CreateRecord() {
               descriptor.resolutionBucket = `${img.width}x${img.height}`;
             }
           } catch {
-            descriptor.exifMetadata = "unknown";
-            descriptor.gpsMetadata = "unknown";
+            // EXIF/GPS detection failed — omit both fields (uncertain)
           }
         } else if (file.type.startsWith("video/")) {
           try {
@@ -230,7 +229,7 @@ export default function CreateRecord() {
           sha256: hash,
           safeDescriptor: {
             mediaType: "text/plain",
-            wordCount,
+            textWordCount: wordCount,
             language: lang,
           },
         },
@@ -637,13 +636,13 @@ export default function CreateRecord() {
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>
-                  Public Note{" "}
-                  <span className="text-muted-foreground font-normal">(Optional)</span>
+                  Private note{" "}
+                  <span className="text-muted-foreground font-normal">(Optional — saved only in your local proof package, never sent to registry)</span>
                 </Label>
                 <Textarea
                   value={publicNote}
                   onChange={handleNoteChange}
-                  placeholder="Describe the context without identifying details..."
+                  placeholder="Private context for your own records only. Never shared publicly."
                   data-testid="textarea-public-note"
                   className="text-sm"
                   rows={3}

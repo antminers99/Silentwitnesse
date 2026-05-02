@@ -59,11 +59,16 @@ async function hashFile(file: File): Promise<string> {
 
 /**
  * Re-computes the packageHash the same way create.tsx does:
- * sha256(JSON.stringify(manifestWithoutPackageHash, null, 2))
+ * sha256(JSON.stringify(baseManifest, null, 2))
+ *
+ * IMPORTANT: The downloaded proof package contains two extra fields that are
+ * added AFTER the hash is computed and must therefore be excluded here:
+ *   - packageHash  (the hash itself, obviously)
+ *   - retractionToken  (raw UUID added post-hash for local storage only)
  */
 async function recomputePackageHash(manifest: ManifestData): Promise<string> {
-  const { packageHash: _removed, ...rest } = manifest;
-  void _removed;
+  const { packageHash: _ph, retractionToken: _rt, ...rest } = manifest;
+  void _ph; void _rt;
   return sha256(JSON.stringify(rest, null, 2));
 }
 

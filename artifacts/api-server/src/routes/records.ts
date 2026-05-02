@@ -263,14 +263,7 @@ router.post("/records", async (req, res): Promise<void> => {
     return;
   }
 
-  // Quality D records may be saved locally but are not accepted into the public registry
-  if ((body.qualityLevel ?? "C") === "D") {
-    res.status(400).json({
-      error: "Low-quality records can be saved locally but are not accepted into the public registry.",
-    });
-    return;
-  }
-
+  // Quality level is always computed server-side. Client-provided qualityLevel is ignored.
   const qualityLevel = computeQualityLevel(body);
 
   const [record] = await db
@@ -285,14 +278,13 @@ router.post("/records", async (req, res): Promise<void> => {
       city: body.city ?? null,
       safeDescriptor: (body.safeDescriptor as object) ?? null,
       status: body.status ?? "timestamped_only_not_verified",
-      qualityLevel: body.qualityLevel ?? qualityLevel,
+      qualityLevel,
       publicWarning: body.publicWarning,
       createdAtLocal: body.createdAtLocal,
       retractionTokenHash: body.retractionTokenHash ?? null,
       // publicationStatus — always pending_review; NOT accepted from client
       publicationStatus: "pending_review",
       isDemo: false,
-      submitterIp: getIpHash(ip),
     })
     .returning();
 
