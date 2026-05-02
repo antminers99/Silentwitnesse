@@ -15,6 +15,9 @@ export default function Home() {
           <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
             Preserve proof without publishing danger.
           </p>
+          <p className="text-sm sm:text-base text-muted-foreground/70 italic max-w-xl mx-auto pt-1">
+            "Bear witness in silence until truth has its day."
+          </p>
         </div>
 
         <div className="mt-10 sm:mt-16 bg-card border border-border rounded-lg p-5 sm:p-8 shadow-sm">

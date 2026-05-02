@@ -41,7 +41,9 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
   public_timestamped_record: { label: "Public Registry Record", variant: "default" },
   rejected_for_public_registry: { label: "Rejected", variant: "destructive" },
   retracted_by_holder: { label: "Retracted by Holder", variant: "secondary" },
-  exact_match_published: { label: "Exact Match Published", variant: "default" },
+  exact_match_published: { label: "Exact Match Verified", variant: "default" },
+  not_matching: { label: "Hash Mismatch", variant: "destructive" },
+  externally_reviewed: { label: "Externally Reviewed", variant: "default" },
 };
 
 export default function RecordDetail() {
@@ -141,6 +143,23 @@ export default function RecordDetail() {
                 <p className="text-sm text-muted-foreground">
                   This record has been retracted by the holder. The fingerprint is preserved but
                   no public metadata is displayed.
+                </p>
+              </div>
+            )}
+            {pubStatus === "exact_match_published" && (
+              <div className="flex items-start gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-lg p-4">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-green-600 dark:text-green-400 mt-0.5" />
+                <p className="text-sm text-green-800 dark:text-green-300">
+                  A verified partner has confirmed that the original file matches this fingerprint.
+                </p>
+              </div>
+            )}
+            {pubStatus === "rejected_for_public_registry" && (
+              <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                <XCircle className="w-4 h-4 flex-shrink-0 text-destructive mt-0.5" />
+                <p className="text-sm text-destructive/90">
+                  This record was not approved for the public registry. It may have been incomplete
+                  or did not meet the minimum quality threshold.
                 </p>
               </div>
             )}

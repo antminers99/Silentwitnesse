@@ -94,8 +94,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-border bg-card mt-auto">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 text-center text-sm text-muted-foreground">
           <p className="leading-relaxed">
-            This app sends only the public record if you press Submit. It never
-            sends the original evidence file.
+            When you submit, only the cryptographic fingerprint and safe metadata are sent.
+            Your original file never leaves your device.
           </p>
           <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
             <Link href="/protocol" className="hover:underline">

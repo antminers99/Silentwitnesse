@@ -125,12 +125,12 @@ export default function CreateRecord() {
 
   const checkNoteSafety = (text: string): string | null => {
     if (/\d[\d\s\-.]{7,}/.test(text))
-      return "Warning: Phone numbers detected in public note.";
+      return "Warning: Phone numbers detected in your note.";
     if (/\d+\.\d+,\s*\d+\.\d+/.test(text))
-      return "Warning: GPS coordinates detected in public note.";
+      return "Warning: GPS coordinates detected in your note.";
     const capsWords = text.match(/\b[A-Z][a-z]+\b/g) || [];
     if (capsWords.length > 5)
-      return "Warning: Many capitalized words detected. Ensure no full names are included.";
+      return "Warning: Many capitalised words detected. Ensure no full names are included.";
     if (["go kill", "murder", "assassinate"].some((p) => text.toLowerCase().includes(p)))
       return "Warning: Note contains flagged phrases.";
     return null;
@@ -793,7 +793,7 @@ export default function CreateRecord() {
                   The original evidence file will not be uploaded.
                 </p>
                 <p className="font-medium text-foreground border-l-2 border-amber-400 pl-3">
-                  Do not include names, exact locations, or accusations in public notes.
+                  Only the fingerprint and the safe public metadata you entered will be submitted. Your private note is not included.
                 </p>
                 <p>
                   Once submitted, the fingerprint enters a review queue. A reviewer will

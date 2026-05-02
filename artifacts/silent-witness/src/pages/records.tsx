@@ -299,10 +299,10 @@ export default function Registry() {
                           </div>
                         </TableCell>
                         <TableCell className="capitalize text-sm">
-                          {record.eventType.replace("_", " ")}
+                          {record.eventType.replace(/_/g, " ")}
                         </TableCell>
                         <TableCell className="capitalize text-sm">
-                          {record.evidenceType.replace("_", " ")}
+                          {record.evidenceType.replace(/_/g, " ")}
                         </TableCell>
                         <TableCell className="text-sm">
                           {[record.city, record.region, record.country]
@@ -365,10 +365,10 @@ export default function Registry() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-0.5">
                       <div className="font-medium text-sm capitalize">
-                        {record.eventType.replace("_", " ")}
+                        {record.eventType.replace(/_/g, " ")}
                       </div>
                       <div className="text-xs text-muted-foreground capitalize">
-                        {record.evidenceType.replace("_", " ")}
+                        {record.evidenceType.replace(/_/g, " ")}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">

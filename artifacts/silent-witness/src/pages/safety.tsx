@@ -20,8 +20,8 @@ const guides = [
   },
   {
     icon: <MapPin className="w-5 h-5 text-primary flex-shrink-0" />,
-    title: "Public notes must be general",
-    body: 'Public notes must not include names, exact places, or direct accusations. Use broader locations only (e.g., "Northern District" rather than "123 Main Street"). If publishing any metadata may put someone at risk, save the record locally only.',
+    title: "Your private note stays on your device",
+    body: 'The private note field is never submitted to the registry — it lives only in your downloaded proof package. Even so, avoid writing full names, phone numbers, exact addresses, or GPS coordinates in it, in case the file is ever accessed by others.',
   },
 ];
 
