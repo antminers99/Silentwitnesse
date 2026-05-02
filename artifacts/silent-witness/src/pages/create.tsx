@@ -243,14 +243,8 @@ export default function CreateRecord() {
   };
 
   const generateManifest = async () => {
-    if (noteWarning) {
-      toast({
-        title: "Resolve warnings",
-        description: "Please resolve privacy warnings in your note.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Private note warnings are informational only — they do not block manifest generation
+    // because the note is never sent to the server (stays in local proof package only)
 
     // Generate retraction token locally — raw token stays in downloaded proof package only
     const token = crypto.randomUUID();
@@ -667,7 +661,6 @@ export default function CreateRecord() {
               <Button
                 onClick={generateManifest}
                 className="flex-1"
-                disabled={!!noteWarning}
                 data-testid="button-generate-manifest"
               >
                 Generate Manifest
