@@ -11,7 +11,6 @@ import Verify from "@/pages/verify";
 import Registry from "@/pages/records";
 import CreateRecord from "@/pages/create";
 import RecordDetail from "@/pages/record-detail";
-import AdminReview from "@/pages/admin";
 
 const queryClient = new QueryClient();
 
@@ -25,7 +24,6 @@ function Router() {
       <Route path="/records/:packageHash" component={RecordDetail} />
       <Route path="/verify" component={Verify} />
       <Route path="/create" component={CreateRecord} />
-      <Route path="/admin/review" component={AdminReview} />
       <Route component={NotFound} />
     </Switch>
   );

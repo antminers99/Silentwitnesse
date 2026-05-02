@@ -87,7 +87,7 @@ export default function Registry() {
             Public Registry
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground">
-            A public ledger of timestamped evidence fingerprints.
+            A structured public ledger of timestamped evidence fingerprints.
           </p>
         </div>
 
@@ -148,10 +148,10 @@ export default function Registry() {
           <Card className="col-span-2">
             <CardContent className="p-3 sm:p-4">
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                <strong className="text-foreground">Notice: </strong>No maps,
-                no precise locations, no victim names, no accusations. Records
-                show "Not publicly verified" unless cleared by a verified
-                partner.
+                <strong className="text-foreground">Fingerprint only — not verified truth. </strong>
+                No names, no accusations, no precise locations, no original evidence.
+                Records are structured fingerprints accepted automatically when they pass safety
+                and quality checks.
               </p>
             </CardContent>
           </Card>
@@ -251,7 +251,7 @@ export default function Registry() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="whitespace-nowrap">Date</TableHead>
+                  <TableHead className="whitespace-nowrap">Registry Date</TableHead>
                   <TableHead>Event Type</TableHead>
                   <TableHead>Evidence</TableHead>
                   <TableHead>Location</TableHead>
@@ -326,7 +326,7 @@ export default function Registry() {
                             variant="secondary"
                             className="font-normal text-xs bg-muted text-muted-foreground whitespace-nowrap"
                           >
-                            Not publicly verified
+                            Fingerprint only
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -403,7 +403,7 @@ export default function Registry() {
                       variant="secondary"
                       className="text-xs bg-muted text-muted-foreground whitespace-nowrap"
                     >
-                      Not verified
+                      Fingerprint only
                     </Badge>
                   </div>
                 </div>

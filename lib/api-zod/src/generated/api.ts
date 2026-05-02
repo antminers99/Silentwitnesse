@@ -16,7 +16,7 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Returns only records with publication_status = public_timestamped_record or exact_match_published.
+ * Returns only records with publication_status = accepted_public or exact_match_published.
  * @summary List public witness records
  */
 export const listRecordsQueryLimitDefault = 50;
@@ -93,20 +93,17 @@ export const ListRecordsResponse = zod.object({
         qualityLevel: zod.enum(["A", "B", "C", "D"]),
         publicationStatus: zod
           .enum([
-            "pending_review",
-            "public_timestamped_record",
-            "rejected_for_public_registry",
+            "accepted_public",
+            "rejected_by_policy",
             "retracted_by_holder",
             "exact_match_published",
           ])
           .describe(
-            "Approval workflow status. Only public_timestamped_record and exact_match_published appear in the public registry.\n",
+            "Policy-based publication status. Only accepted_public and exact_match_published appear in the public registry. All other statuses return 404 on the public endpoint.\n",
           ),
         status: zod
           .string()
-          .describe(
-            "Record vocabulary status (timestamped_only_not_verified etc.)",
-          ),
+          .describe("Record vocabulary status (timestamped_only_not_verified)"),
         publicWarning: zod.string(),
         createdAtLocal: zod
           .string()
@@ -116,25 +113,19 @@ export const ListRecordsResponse = zod.object({
         serverReceivedAtUtc: zod
           .string()
           .describe(
-            "Timestamp set exclusively by the server when the public record was received. The client cannot set or override this value.\n",
-          ),
-        approvedAtUtc: zod
-          .string()
-          .nullish()
-          .describe(
-            "UTC time when a reviewer approved this record for the public registry.",
+            "Registry timestamp set exclusively by the server when the fingerprint was received. The client cannot set or override this value.\n",
           ),
         isDemo: zod.boolean(),
       })
       .describe(
-        "A public witness record. Exact SHA-256 matching only works if the later file is byte-for-byte identical. Files sent through messaging or social platforms may be compressed or re-encoded, causing exact hashes not to match.\n",
+        "A public witness record. Fingerprint only — not verified truth. Exact SHA-256 matching only works if the later file is byte-for-byte identical. Files sent through messaging or social platforms may be compressed or re-encoded, causing exact hashes not to match.\n",
       ),
   ),
   total: zod.number(),
 });
 
 /**
- * Submits a fingerprint for review. Records are set to pending_review and do not appear in the public registry until approved. The server sets serverReceivedAtUtc and publicationStatus — client values for these fields are ignored.
+ * Submits a fingerprint. The server runs automatic policy checks. Records that pass all checks are immediately set to accepted_public and appear in the registry. Records that fail safety or quality checks return rejected_by_policy with a reason. The server sets serverReceivedAtUtc and publicationStatus — client values for these fields are ignored.
 
  * @summary Submit a public witness record
  */
@@ -147,8 +138,29 @@ export const CreateRecordBody = zod
       .string()
       .nullish()
       .describe("SHA-256 of the original selected file (optional)"),
-    eventType: zod.string(),
-    evidenceType: zod.string(),
+    eventType: zod.enum([
+      "kidnapping",
+      "killing",
+      "detention",
+      "threat",
+      "theft",
+      "extortion",
+      "assault",
+      "displacement",
+      "destruction",
+      "other",
+      "withheld",
+    ]),
+    evidenceType: zod.enum([
+      "video",
+      "image",
+      "audio",
+      "document",
+      "screenshot",
+      "written_testimony",
+      "package",
+      "withheld",
+    ]),
     country: zod.string().nullish(),
     region: zod.string().nullish(),
     city: zod.string().nullish(),
@@ -203,11 +215,12 @@ export const CreateRecordBody = zod
     honeypot: zod.string().nullish(),
   })
   .describe(
-    "Fields accepted from the client. serverReceivedAtUtc and publicationStatus are NOT accepted — both are always set by the server. Exact SHA-256 matching requires the byte-for-byte identical file.\n",
+    "Fields accepted from the client. serverReceivedAtUtc and publicationStatus are NOT accepted — both are always set by the server. No publicNote field — private notes must stay in the local proof package only. Exact SHA-256 matching requires the byte-for-byte identical file.\n",
   );
 
 /**
- * Returns the record regardless of publication status (for verification and retraction).
+ * Returns the record if it is publicly visible (accepted_public or exact_match_published). Returns 404 for non-public records to avoid leaking metadata.
+
  * @summary Get a witness record by package hash
  */
 export const GetRecordParams = zod.object({
@@ -272,20 +285,17 @@ export const GetRecordResponse = zod
     qualityLevel: zod.enum(["A", "B", "C", "D"]),
     publicationStatus: zod
       .enum([
-        "pending_review",
-        "public_timestamped_record",
-        "rejected_for_public_registry",
+        "accepted_public",
+        "rejected_by_policy",
         "retracted_by_holder",
         "exact_match_published",
       ])
       .describe(
-        "Approval workflow status. Only public_timestamped_record and exact_match_published appear in the public registry.\n",
+        "Policy-based publication status. Only accepted_public and exact_match_published appear in the public registry. All other statuses return 404 on the public endpoint.\n",
       ),
     status: zod
       .string()
-      .describe(
-        "Record vocabulary status (timestamped_only_not_verified etc.)",
-      ),
+      .describe("Record vocabulary status (timestamped_only_not_verified)"),
     publicWarning: zod.string(),
     createdAtLocal: zod
       .string()
@@ -295,18 +305,12 @@ export const GetRecordResponse = zod
     serverReceivedAtUtc: zod
       .string()
       .describe(
-        "Timestamp set exclusively by the server when the public record was received. The client cannot set or override this value.\n",
-      ),
-    approvedAtUtc: zod
-      .string()
-      .nullish()
-      .describe(
-        "UTC time when a reviewer approved this record for the public registry.",
+        "Registry timestamp set exclusively by the server when the fingerprint was received. The client cannot set or override this value.\n",
       ),
     isDemo: zod.boolean(),
   })
   .describe(
-    "A public witness record. Exact SHA-256 matching only works if the later file is byte-for-byte identical. Files sent through messaging or social platforms may be compressed or re-encoded, causing exact hashes not to match.\n",
+    "A public witness record. Fingerprint only — not verified truth. Exact SHA-256 matching only works if the later file is byte-for-byte identical. Files sent through messaging or social platforms may be compressed or re-encoded, causing exact hashes not to match.\n",
   );
 
 /**

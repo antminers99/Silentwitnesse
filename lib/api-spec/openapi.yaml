@@ -32,7 +32,7 @@ paths:
       operationId: listRecords
       tags: [records]
       summary: List public witness records
-      description: Returns only records with publication_status = public_timestamped_record or exact_match_published.
+      description: Returns only records with publication_status = accepted_public or exact_match_published.
       parameters:
         - name: country
           in: query
@@ -81,9 +81,11 @@ paths:
       tags: [records]
       summary: Submit a public witness record
       description: >
-        Submits a fingerprint for review. Records are set to pending_review and do not
-        appear in the public registry until approved. The server sets serverReceivedAtUtc
-        and publicationStatus — client values for these fields are ignored.
+        Submits a fingerprint. The server runs automatic policy checks. Records that
+        pass all checks are immediately set to accepted_public and appear in the registry.
+        Records that fail safety or quality checks return rejected_by_policy with a reason.
+        The server sets serverReceivedAtUtc and publicationStatus — client values for
+        these fields are ignored.
       requestBody:
         required: true
         content:
@@ -92,17 +94,17 @@ paths:
               $ref: "#/components/schemas/CreateRecordBody"
       responses:
         "201":
-          description: Record created and pending review
+          description: Record accepted and published
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WitnessRecord"
         "400":
-          description: Validation error
+          description: Validation error or rejected_by_policy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/PolicyRejectionResponse"
         "409":
           description: Duplicate record
           content:
@@ -121,7 +123,9 @@ paths:
       operationId: getRecord
       tags: [records]
       summary: Get a witness record by package hash
-      description: Returns the record regardless of publication status (for verification and retraction).
+      description: >
+        Returns the record if it is publicly visible (accepted_public or exact_match_published).
+        Returns 404 for non-public records to avoid leaking metadata.
       parameters:
         - name: packageHash
           in: path
@@ -136,7 +140,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/WitnessRecord"
         "404":
-          description: Not found
+          description: Not found or not public
           content:
             application/json:
               schema:
@@ -173,6 +177,18 @@ components:
       required:
         - error
 
+    PolicyRejectionResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [rejected_by_policy]
+        reason:
+          type: string
+      required:
+        - status
+        - reason
+
     AlreadyRegisteredResponse:
       type: object
       properties:
@@ -182,13 +198,12 @@ components:
         error:
           type: string
         recordUrl:
-          type: string
+          type: ["string", "null"]
         serverReceivedAtUtc:
           type: string
       required:
         - status
         - error
-        - recordUrl
         - serverReceivedAtUtc
 
     SafeDescriptor:
@@ -225,9 +240,10 @@ components:
     WitnessRecord:
       type: object
       description: >
-        A public witness record. Exact SHA-256 matching only works if the later file
-        is byte-for-byte identical. Files sent through messaging or social platforms
-        may be compressed or re-encoded, causing exact hashes not to match.
+        A public witness record. Fingerprint only — not verified truth.
+        Exact SHA-256 matching only works if the later file is byte-for-byte identical.
+        Files sent through messaging or social platforms may be compressed or re-encoded,
+        causing exact hashes not to match.
       properties:
         id:
           type: integer
@@ -258,17 +274,17 @@ components:
         publicationStatus:
           type: string
           enum:
-            - pending_review
-            - public_timestamped_record
-            - rejected_for_public_registry
+            - accepted_public
+            - rejected_by_policy
             - retracted_by_holder
             - exact_match_published
           description: >
-            Approval workflow status. Only public_timestamped_record and
+            Policy-based publication status. Only accepted_public and
             exact_match_published appear in the public registry.
+            All other statuses return 404 on the public endpoint.
         status:
           type: string
-          description: Record vocabulary status (timestamped_only_not_verified etc.)
+          description: Record vocabulary status (timestamped_only_not_verified)
         publicWarning:
           type: string
         createdAtLocal:
@@ -279,11 +295,8 @@ components:
         serverReceivedAtUtc:
           type: string
           description: >
-            Timestamp set exclusively by the server when the public record was received.
+            Registry timestamp set exclusively by the server when the fingerprint was received.
             The client cannot set or override this value.
-        approvedAtUtc:
-          type: ["string", "null"]
-          description: UTC time when a reviewer approved this record for the public registry.
         isDemo:
           type: boolean
       required:
@@ -317,6 +330,7 @@ components:
       description: >
         Fields accepted from the client. serverReceivedAtUtc and publicationStatus
         are NOT accepted — both are always set by the server.
+        No publicNote field — private notes must stay in the local proof package only.
         Exact SHA-256 matching requires the byte-for-byte identical file.
       properties:
         packageHash:
@@ -327,8 +341,29 @@ components:
           description: SHA-256 of the original selected file (optional)
         eventType:
           type: string
+          enum:
+            - kidnapping
+            - killing
+            - detention
+            - threat
+            - theft
+            - extortion
+            - assault
+            - displacement
+            - destruction
+            - other
+            - withheld
         evidenceType:
           type: string
+          enum:
+            - video
+            - image
+            - audio
+            - document
+            - screenshot
+            - written_testimony
+            - package
+            - withheld
         country:
           type: ["string", "null"]
         region:

@@ -10,16 +10,17 @@ import {
 
 const router: IRouter = Router();
 
+// ── Safety validation patterns ─────────────────────────────────────────────
 const PHONE_REGEX = /\d[\d\s\-.]{7,}/;
-const GPS_REGEX = /\d+\.\d+,\s*\d+\.\d+/;
-const VIOLENT_PHRASES =
-  /\bgo\s+kill\b|\bkill\s+him\b|\bkill\s+her\b|\bkill\s+them\b|\ball\s+of\s+them\b/i;
-const UNSAFE_PATTERNS =
-  /\b(go\s+kill|murder|assassinate|execute|all\s+guilty|they\s+deserve\s+to\s+die)\b/i;
-const MAX_PUBLIC_NOTE_LENGTH = 200;
+const GPS_REGEX = /\d{1,3}\.\d{4,},?\s*\d{1,3}\.\d{4,}/;
+const URL_REGEX = /https?:\/\/|www\./i;
+const EMAIL_REGEX = /\S+@\S+\.\S+/;
+const STREET_ADDRESS_REGEX = /\b\d+\s+[a-z]+\s+(st|street|ave|avenue|rd|road|blvd|dr|drive|ln|lane)\b/i;
+const PLATE_REGEX = /\b[A-Z]{1,3}[\s-]?\d{3,5}[\s-]?[A-Z]{0,3}\b/;
+const VIOLENT_PHRASES = /\b(go\s+kill|kill\s+him|kill\s+her|kill\s+them|all\s+of\s+them|they\s+deserve\s+to\s+die|murder|assassinate|execute)\b/i;
 
 // Publication statuses that appear in the public registry
-const PUBLIC_STATUSES = ["public_timestamped_record", "exact_match_published"];
+const PUBLIC_STATUSES = ["accepted_public", "exact_match_published"];
 
 const submissionCounts = new Map<string, { count: number; windowStart: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -46,16 +47,26 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-function validatePublicNote(note: string | null | undefined): string | null {
-  if (!note) return null;
-  if (note.length > MAX_PUBLIC_NOTE_LENGTH)
-    return `Public note is too long (max ${MAX_PUBLIC_NOTE_LENGTH} characters).`;
-  if (PHONE_REGEX.test(note))
-    return "Public note appears to contain a phone number. Remove it before submitting publicly.";
-  if (GPS_REGEX.test(note))
-    return "Public note appears to contain GPS coordinates. Remove them before submitting publicly.";
-  if (VIOLENT_PHRASES.test(note) || UNSAFE_PATTERNS.test(note))
-    return "Public note contains language that cannot be submitted publicly.";
+/**
+ * Validate a location string field for unsafe patterns.
+ * Returns an error message string if unsafe, null if safe.
+ */
+function validateLocationField(value: string | null | undefined, fieldName: string): string | null {
+  if (!value) return null;
+  if (PHONE_REGEX.test(value))
+    return `${fieldName} appears to contain a phone number.`;
+  if (GPS_REGEX.test(value))
+    return `${fieldName} appears to contain GPS coordinates.`;
+  if (URL_REGEX.test(value))
+    return `${fieldName} must not contain URLs.`;
+  if (EMAIL_REGEX.test(value))
+    return `${fieldName} must not contain email addresses.`;
+  if (STREET_ADDRESS_REGEX.test(value))
+    return `${fieldName} must not contain street addresses.`;
+  if (PLATE_REGEX.test(value))
+    return `${fieldName} appears to contain a vehicle plate number.`;
+  if (VIOLENT_PHRASES.test(value))
+    return `${fieldName} contains language that cannot be submitted.`;
   return null;
 }
 
@@ -73,17 +84,13 @@ function computeQualityLevel(body: {
       : [];
   const hasDescriptor = descriptorEntries.length > 0;
 
-  // D: both withheld with no meaningful descriptor, or no descriptor at all
   const bothWithheld =
     body.eventType === "withheld" && body.evidenceType === "withheld";
   if (bothWithheld && !hasDescriptor) return "D";
   if (!body.safeDescriptor || !hasDescriptor) return "D";
 
-  // A: known event, known evidence, has descriptor
   if (body.evidenceType !== "withheld" && body.eventType !== "withheld") return "A";
-  // B: known evidence or known event, has descriptor
   if (body.evidenceType !== "withheld" || body.eventType !== "withheld") return "B";
-  // C: both withheld but has some descriptor
   return "C";
 }
 
@@ -106,7 +113,6 @@ function serializeRecord(r: typeof witnessRecordsTable.$inferSelect) {
     publicWarning: r.publicWarning,
     createdAtLocal: r.createdAtLocal ?? "",
     serverReceivedAtUtc: r.serverReceivedAtUtc.toISOString(),
-    approvedAtUtc: r.approvedAtUtc?.toISOString() ?? null,
     isDemo: r.isDemo,
   };
 }
@@ -172,7 +178,7 @@ router.get("/records/stats", async (req, res): Promise<void> => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// GET /records — public registry; only approved records.
+// GET /records — public registry; only accepted records.
 // ──────────────────────────────────────────────────────────────────────────────
 router.get("/records", async (req, res): Promise<void> => {
   const parsed = ListRecordsQueryParams.safeParse(req.query);
@@ -217,7 +223,8 @@ router.get("/records", async (req, res): Promise<void> => {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // POST /records
-// Sets publicationStatus = pending_review. Record is not public until approved.
+// Runs policy checks. If safe: sets publicationStatus = accepted_public (immediately public).
+// If unsafe or quality D: returns rejected_by_policy with reason.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post("/records", async (req, res): Promise<void> => {
   const ip =
@@ -249,40 +256,51 @@ router.post("/records", async (req, res): Promise<void> => {
     return;
   }
 
-  const noteError = validatePublicNote(
-    (body as Record<string, unknown>)["publicNote"] as string | null
-  );
-  if (noteError) {
-    res.status(400).json({ error: noteError });
+  // Location field safety checks
+  const locationErrors = [
+    validateLocationField(body.country ?? null, "Country"),
+    validateLocationField(body.region ?? null, "Region"),
+    validateLocationField(body.city ?? null, "City"),
+  ].filter(Boolean);
+
+  if (locationErrors.length > 0) {
+    res.status(400).json({
+      status: "rejected_by_policy",
+      reason: locationErrors[0],
+    });
     return;
   }
 
+  // Duplicate check
   const existing = await db
     .select({
       id: witnessRecordsTable.id,
       serverReceivedAtUtc: witnessRecordsTable.serverReceivedAtUtc,
+      publicationStatus: witnessRecordsTable.publicationStatus,
     })
     .from(witnessRecordsTable)
     .where(eq(witnessRecordsTable.packageHash, body.packageHash))
     .limit(1);
 
   if (existing.length > 0) {
+    const isPublic = PUBLIC_STATUSES.includes(existing[0]!.publicationStatus);
     res.status(409).json({
       status: "already_registered",
       error: "already_registered",
-      recordUrl: `/records/${body.packageHash}`,
+      recordUrl: isPublic ? `/records/${body.packageHash}` : null,
       serverReceivedAtUtc: existing[0]!.serverReceivedAtUtc.toISOString(),
     });
     return;
   }
 
-  // Quality level is always computed server-side. Client-provided qualityLevel is ignored.
+  // Quality level is always computed server-side
   const qualityLevel = computeQualityLevel(body);
 
   if (qualityLevel === "D") {
     res.status(400).json({
-      error:
-        "Low-quality records can be saved locally but are not accepted into the public registry. Please provide at least an event type, evidence type, and a descriptor.",
+      status: "rejected_by_policy",
+      reason:
+        "Record does not meet minimum quality threshold. Provide at least an event type, evidence type, and a descriptor.",
     });
     return;
   }
@@ -303,20 +321,19 @@ router.post("/records", async (req, res): Promise<void> => {
       publicWarning: body.publicWarning,
       createdAtLocal: body.createdAtLocal,
       retractionTokenHash: body.retractionTokenHash ?? null,
-      // publicationStatus — always pending_review; NOT accepted from client
-      publicationStatus: "pending_review",
+      // publicationStatus — always accepted_public for records that pass policy checks
+      publicationStatus: "accepted_public",
       isDemo: false,
     })
     .returning();
 
-  req.log.info({ packageHash: body.packageHash, qualityLevel }, "New witness record submitted");
+  req.log.info({ packageHash: body.packageHash, qualityLevel }, "New witness record accepted");
   res.status(201).json(serializeRecord(record));
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
 // GET /records/:packageHash
-// Only exposes public records. Non-public records return 404 to avoid leaking
-// metadata for records that are pending, rejected, or retracted.
+// Only exposes public records. Non-public returns 404 to avoid leaking metadata.
 // ──────────────────────────────────────────────────────────────────────────────
 router.get("/records/:packageHash", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.packageHash)

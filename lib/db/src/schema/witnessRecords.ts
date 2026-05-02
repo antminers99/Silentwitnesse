@@ -18,12 +18,13 @@ export const witnessRecordsTable = pgTable("witness_records", {
   city: text("city"),
   safeDescriptor: jsonb("safe_descriptor"),
   qualityLevel: text("quality_level").notNull().default("C"),
-  // Approval workflow status — controls public visibility
-  publicationStatus: text("publication_status").notNull().default("pending_review"),
-  // Internal review tracking
-  reviewStatus: text("review_status").notNull().default("pending"),
-  reviewerNotes: text("reviewer_notes"),
-  // Record vocabulary status (what the record represents, from the original 14-fix vocabulary)
+  // Policy-based publication status — set server-side only
+  // accepted_public: passes all policy checks, visible in registry
+  // rejected_by_policy: failed safety/quality checks, never shown publicly
+  // retracted_by_holder: holder used retraction token
+  // exact_match_published: a later file was verified as byte-for-byte identical
+  publicationStatus: text("publication_status").notNull().default("accepted_public"),
+  // Record vocabulary status
   status: text("status").notNull().default("timestamped_only_not_verified"),
   publicWarning: text("public_warning").notNull(),
   // Provided by the user's browser at fingerprint creation time (not independently verified)
@@ -32,9 +33,6 @@ export const witnessRecordsTable = pgTable("witness_records", {
   serverReceivedAtUtc: timestamp("server_received_at_utc", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  // Review timestamps — all set server-side only
-  approvedAtUtc: timestamp("approved_at_utc", { withTimezone: true }),
-  rejectedAtUtc: timestamp("rejected_at_utc", { withTimezone: true }),
   retractedAtUtc: timestamp("retracted_at_utc", { withTimezone: true }),
   // Hash of the holder's retraction token — never store the raw token
   retractionTokenHash: text("retraction_token_hash"),
@@ -47,30 +45,16 @@ export const witnessRecordsTable = pgTable("witness_records", {
 export const insertWitnessRecordSchema = createInsertSchema(witnessRecordsTable).omit({
   id: true,
   serverReceivedAtUtc: true, // always set by server
-  approvedAtUtc: true,
-  rejectedAtUtc: true,
   retractedAtUtc: true,
   createdAt: true,
   updatedAt: true,
   submitterIp: true,
-  reviewStatus: true,
-  reviewerNotes: true,
-  publicationStatus: true, // always set by server to pending_review
+  publicationStatus: true, // always set by server
+  qualityLevel: true,      // always computed by server
 });
 
 export type InsertWitnessRecord = z.infer<typeof insertWitnessRecordSchema>;
 export type WitnessRecord = typeof witnessRecordsTable.$inferSelect;
-
-export const reviewActionsTable = pgTable("review_actions", {
-  id: serial("id").primaryKey(),
-  recordId: integer("record_id").notNull(),
-  action: text("action").notNull(),
-  reason: text("reason"),
-  reviewerLabel: text("reviewer_label"),
-  createdAtUtc: timestamp("created_at_utc", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type ReviewAction = typeof reviewActionsTable.$inferSelect;
 
 export const rateLimitTable = pgTable("rate_limit", {
   id: serial("id").primaryKey(),

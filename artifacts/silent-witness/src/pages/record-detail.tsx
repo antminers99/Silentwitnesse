@@ -37,13 +37,10 @@ function formatUtcTime(iso: string): string {
 }
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  pending_review: { label: "Pending Review", variant: "outline" },
-  public_timestamped_record: { label: "Public Registry Record", variant: "default" },
-  rejected_for_public_registry: { label: "Rejected", variant: "destructive" },
+  accepted_public: { label: "Accepted Public Fingerprint", variant: "default" },
+  rejected_by_policy: { label: "Rejected by Policy", variant: "destructive" },
   retracted_by_holder: { label: "Retracted by Holder", variant: "secondary" },
   exact_match_published: { label: "Exact Match Verified", variant: "default" },
-  not_matching: { label: "Hash Mismatch", variant: "destructive" },
-  externally_reviewed: { label: "Externally Reviewed", variant: "default" },
 };
 
 export default function RecordDetail() {
@@ -57,10 +54,9 @@ export default function RecordDetail() {
     },
   });
 
-  const r = record as (typeof record & { publicationStatus?: string; approvedAtUtc?: string | null; originalHash?: string | null; safeCopyHash?: string | null }) | undefined;
+  const r = record as (typeof record & { publicationStatus?: string; originalHash?: string | null; safeCopyHash?: string | null }) | undefined;
   const pubStatus = r?.publicationStatus;
   const statusInfo = pubStatus ? (STATUS_LABELS[pubStatus] ?? { label: pubStatus, variant: "outline" as const }) : null;
-  const approvedAtUtc = r?.approvedAtUtc ?? null;
   const originalHash = r?.originalHash ?? null;
   const safeCopyHash = r?.safeCopyHash ?? null;
 
@@ -128,15 +124,7 @@ export default function RecordDetail() {
               </p>
             </div>
 
-            {/* Publication status notice */}
-            {pubStatus === "pending_review" && (
-              <div className="flex items-start gap-3 bg-muted/50 border border-border rounded-lg p-4">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-500 mt-0.5" />
-                <p className="text-sm text-muted-foreground">
-                  This record is pending review. It is not yet visible in the public registry.
-                </p>
-              </div>
-            )}
+            {/* Publication status notices */}
             {pubStatus === "retracted_by_holder" && (
               <div className="flex items-start gap-3 bg-muted/50 border border-border rounded-lg p-4">
                 <XCircle className="w-4 h-4 flex-shrink-0 text-muted-foreground mt-0.5" />
@@ -150,16 +138,7 @@ export default function RecordDetail() {
               <div className="flex items-start gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-lg p-4">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-green-600 dark:text-green-400 mt-0.5" />
                 <p className="text-sm text-green-800 dark:text-green-300">
-                  A verified partner has confirmed that the original file matches this fingerprint.
-                </p>
-              </div>
-            )}
-            {pubStatus === "rejected_for_public_registry" && (
-              <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-                <XCircle className="w-4 h-4 flex-shrink-0 text-destructive mt-0.5" />
-                <p className="text-sm text-destructive/90">
-                  This record was not approved for the public registry. It may have been incomplete
-                  or did not meet the minimum quality threshold.
+                  A later file has been verified as byte-for-byte identical to this fingerprint.
                 </p>
               </div>
             )}
@@ -194,43 +173,27 @@ export default function RecordDetail() {
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary/70">
                   <Calendar className="w-3.5 h-3.5" />
-                  Registry timestamp
+                  Registry timestamp (server-recorded)
                 </div>
                 <div className="font-mono text-base sm:text-lg text-foreground">
                   {formatUtcTime(record.serverReceivedAtUtc)}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Recorded by the Silent Witness server when this fingerprint was submitted.
+                  Set by the Silent Witness server when this fingerprint was received. The client cannot set or override this value.
                 </div>
               </div>
 
-              {/* Approved timestamp */}
-              {approvedAtUtc && (
-                <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-lg p-4 space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Approved for public registry
-                  </div>
-                  <div className="font-mono text-sm text-foreground">
-                    {formatUtcTime(approvedAtUtc)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    This record was approved by a reviewer and is visible in the public registry.
-                  </div>
-                </div>
-              )}
-
               {/* Combined explanation */}
               <div className="text-xs text-muted-foreground bg-muted/40 border border-border rounded p-3 leading-relaxed">
-                Local creation time is provided by the user&apos;s device. Registry timestamp
-                is recorded by the Silent Witness server when the fingerprint was submitted.
+                Local creation time is provided by the user&apos;s device and is not independently verified.
+                Registry timestamp is recorded by the server at submission time.
                 Neither timestamp proves when the original event occurred.
               </div>
             </div>
 
             <Separator />
 
-            {/* ── Verification wording ──────────────────────────────────── */}
+            {/* ── What this record proves ────────────────────────────────── */}
             <div className="space-y-3">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 What this record proves
@@ -238,17 +201,17 @@ export default function RecordDetail() {
               <div className="flex items-start gap-3 bg-destructive/5 border border-destructive/20 rounded-lg p-4">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0 text-destructive mt-0.5" />
                 <p className="text-sm text-destructive/90 leading-relaxed font-medium">
-                  This record is a timestamped fingerprint only. It does not prove that an event
-                  happened, identify a perpetrator, or guarantee legal admissibility. Verification
-                  requires the original file or exact safe copy.
+                  This record is a fingerprint only. It does not prove that an event happened,
+                  identify a perpetrator, or guarantee legal admissibility. Verification requires
+                  the original file or exact safe copy.
                 </p>
               </div>
               <div className="flex items-start gap-3 bg-muted/40 border border-border rounded-lg p-4">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0 text-muted-foreground mt-0.5" />
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   A registry timestamp proves only that this fingerprint was submitted to the
-                  registry no later than that server time. It does not prove when the original
-                  file was created and does not prove that the event happened.
+                  registry no later than that server-recorded time. It does not prove when the
+                  original file was created or that the event occurred.
                 </p>
               </div>
               {record.publicWarning && (
@@ -277,8 +240,8 @@ export default function RecordDetail() {
                   {record.packageHash}
                 </code>
                 <p className="text-xs text-muted-foreground">
-                  SHA-256 of the canonical manifest JSON. Uniquely identifies this witness record
-                  package. Original files are never transmitted.
+                  SHA-256 of the canonical manifest JSON. Uniquely identifies this witness record.
+                  Original files are never transmitted or stored.
                 </p>
               </div>
 
@@ -315,7 +278,7 @@ export default function RecordDetail() {
 
             <Separator />
 
-            {/* ── Publication status ─────────────────────────────────────── */}
+            {/* ── Registry status ─────────────────────────────────────────── */}
             <div className="space-y-2">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Registry status
@@ -326,12 +289,12 @@ export default function RecordDetail() {
                 </Badge>
               ) : (
                 <Badge variant="secondary" className="bg-muted text-muted-foreground font-normal">
-                  Not publicly verified
+                  Fingerprint only — not verified truth
                 </Badge>
               )}
               <p className="text-xs text-muted-foreground">
-                Records are shown as &ldquo;Not publicly verified&rdquo; unless reviewed by a verified
-                partner organisation.
+                Fingerprint only — not verified truth. This record does not prove that an event
+                happened or that the evidence is authentic.
               </p>
             </div>
           </div>

@@ -103,8 +103,7 @@ export default function CreateRecord() {
   const [country, setCountry] = useState("");
   const [region, setRegion] = useState("");
   const [city, setCity] = useState("");
-  const [publicNote, setPublicNote] = useState("");
-  const [noteWarning, setNoteWarning] = useState<string | null>(null);
+  const [privateNote, setPrivateNote] = useState("");
 
   const [manifest, setManifest] = useState<Record<string, unknown> | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -123,24 +122,6 @@ export default function CreateRecord() {
     setFiles(files.filter((_, i) => i !== index));
   };
 
-  const checkNoteSafety = (text: string): string | null => {
-    if (/\d[\d\s\-.]{7,}/.test(text))
-      return "Warning: Phone numbers detected in your note.";
-    if (/\d+\.\d+,\s*\d+\.\d+/.test(text))
-      return "Warning: GPS coordinates detected in your note.";
-    const capsWords = text.match(/\b[A-Z][a-z]+\b/g) || [];
-    if (capsWords.length > 5)
-      return "Warning: Many capitalised words detected. Ensure no full names are included.";
-    if (["go kill", "murder", "assassinate"].some((p) => text.toLowerCase().includes(p)))
-      return "Warning: Note contains flagged phrases.";
-    return null;
-  };
-
-  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    setPublicNote(text);
-    setNoteWarning(checkNoteSafety(text));
-  };
 
   const processFiles = async () => {
     setIsProcessing(true);
@@ -287,7 +268,7 @@ export default function CreateRecord() {
       publicWarning:
         "Original evidence is not shared. This record does not prove guilt or truth.",
       retractionTokenHash: tokenHash,
-      privateNote: publicNote || undefined,
+      privateNote: privateNote || undefined,
     };
 
     const manifestString = JSON.stringify(baseManifest, null, 2);
@@ -352,8 +333,8 @@ export default function CreateRecord() {
         data: {
           packageHash: hash,
           originalHash: pub.originalHash ? String(pub.originalHash) : null,
-          eventType: String(pub.eventType),
-          evidenceType: String(pub.evidenceType),
+          eventType: String(pub.eventType) as import("@workspace/api-client-react").CreateRecordBodyEventType,
+          evidenceType: String(pub.evidenceType) as import("@workspace/api-client-react").CreateRecordBodyEvidenceType,
           country: loc.country !== "withheld" ? loc.country : null,
           region: loc.region !== "withheld" ? loc.region : null,
           city: loc.city !== "withheld" ? loc.city : null,
@@ -366,9 +347,9 @@ export default function CreateRecord() {
       {
         onSuccess: () =>
           toast({
-            title: "Submitted for Review",
+            title: "Submitted to Registry",
             description:
-              "Fingerprint submitted. It will appear in the public registry after reviewer approval.",
+              "Fingerprint submitted. It is now publicly visible in the registry.",
           }),
         onError: (err) => {
           const apiErr = err as ApiError<{ status?: string; error?: string }>;
@@ -650,19 +631,13 @@ export default function CreateRecord() {
                   <span className="text-muted-foreground font-normal">(Optional — saved only in your local proof package, never sent to registry)</span>
                 </Label>
                 <Textarea
-                  value={publicNote}
-                  onChange={handleNoteChange}
+                  value={privateNote}
+                  onChange={(e) => setPrivateNote(e.target.value)}
                   placeholder="Private context for your own records only. Never shared publicly."
                   data-testid="textarea-public-note"
                   className="text-sm"
                   rows={3}
                 />
-                {noteWarning && (
-                  <div className="text-destructive text-xs sm:text-sm flex items-start gap-1.5 mt-1">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    {noteWarning}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -812,9 +787,8 @@ export default function CreateRecord() {
                   Only the fingerprint and the safe public metadata you entered will be submitted. Your private note is not included.
                 </p>
                 <p>
-                  Once submitted, the fingerprint enters a review queue. A reviewer will
-                  check it before it appears in the public registry. Your retraction token
-                  (in your proof package) lets you request removal later.
+                  Once submitted, the fingerprint appears immediately in the public registry.
+                  Your retraction token (in your proof package) lets you request removal later.
                 </p>
               </div>
             </DialogDescription>

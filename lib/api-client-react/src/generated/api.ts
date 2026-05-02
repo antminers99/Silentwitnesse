@@ -23,6 +23,7 @@ import type {
   HealthStatus,
   ListRecordsParams,
   ListRecordsResponse,
+  PolicyRejectionResponse,
   RegistryStats,
   WitnessRecord,
 } from "./api.schemas";
@@ -113,7 +114,7 @@ export function useHealthCheck<
 }
 
 /**
- * Returns only records with publication_status = public_timestamped_record or exact_match_published.
+ * Returns only records with publication_status = accepted_public or exact_match_published.
  * @summary List public witness records
  */
 export const getListRecordsUrl = (params?: ListRecordsParams) => {
@@ -208,7 +209,7 @@ export function useListRecords<
 }
 
 /**
- * Submits a fingerprint for review. Records are set to pending_review and do not appear in the public registry until approved. The server sets serverReceivedAtUtc and publicationStatus — client values for these fields are ignored.
+ * Submits a fingerprint. The server runs automatic policy checks. Records that pass all checks are immediately set to accepted_public and appear in the registry. Records that fail safety or quality checks return rejected_by_policy with a reason. The server sets serverReceivedAtUtc and publicationStatus — client values for these fields are ignored.
 
  * @summary Submit a public witness record
  */
@@ -229,7 +230,9 @@ export const createRecord = async (
 };
 
 export const getCreateRecordMutationOptions = <
-  TError = ErrorType<ErrorResponse | AlreadyRegisteredResponse>,
+  TError = ErrorType<
+    PolicyRejectionResponse | AlreadyRegisteredResponse | ErrorResponse
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -271,14 +274,16 @@ export type CreateRecordMutationResult = NonNullable<
 >;
 export type CreateRecordMutationBody = BodyType<CreateRecordBody>;
 export type CreateRecordMutationError = ErrorType<
-  ErrorResponse | AlreadyRegisteredResponse
+  PolicyRejectionResponse | AlreadyRegisteredResponse | ErrorResponse
 >;
 
 /**
  * @summary Submit a public witness record
  */
 export const useCreateRecord = <
-  TError = ErrorType<ErrorResponse | AlreadyRegisteredResponse>,
+  TError = ErrorType<
+    PolicyRejectionResponse | AlreadyRegisteredResponse | ErrorResponse
+  >,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -298,7 +303,8 @@ export const useCreateRecord = <
 };
 
 /**
- * Returns the record regardless of publication status (for verification and retraction).
+ * Returns the record if it is publicly visible (accepted_public or exact_match_published). Returns 404 for non-public records to avoid leaking metadata.
+
  * @summary Get a witness record by package hash
  */
 export const getGetRecordUrl = (packageHash: string) => {
