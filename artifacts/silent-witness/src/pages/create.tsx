@@ -1,15 +1,37 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, FileWarning, Upload, FileText, Check, AlertTriangle, ArrowRight, Download, Copy, Share2 } from "lucide-react";
-import { sha256, formatFileSizeBucket, formatDurationBucket, detectVideoDuration, detectAudioDuration } from "@/lib/crypto";
+import {
+  Shield,
+  Upload,
+  FileText,
+  Check,
+  AlertTriangle,
+  ArrowRight,
+  Download,
+  Copy,
+  Share2,
+  File,
+} from "lucide-react";
+import {
+  sha256,
+  formatFileSizeBucket,
+  formatDurationBucket,
+  detectVideoDuration,
+  detectAudioDuration,
+} from "@/lib/crypto";
 import { useCreateRecord } from "@workspace/api-client-react";
 
 type RecordType = "file" | "testimony" | "package";
@@ -24,10 +46,33 @@ interface FileHashEntry {
     durationBucket?: string;
     resolutionBucket?: string;
     fileSizeBucket?: string;
+    wordCount?: number;
+    language?: string;
     gpsMetadata?: "present" | "absent" | "unknown";
     exifMetadata?: "present" | "absent" | "unknown";
   };
 }
+
+const RECORD_TYPES: { value: RecordType; label: string; icon: React.ReactNode; desc: string }[] = [
+  {
+    value: "file",
+    label: "File Evidence",
+    icon: <File className="w-5 h-5" />,
+    desc: "One image, video, audio, or document",
+  },
+  {
+    value: "testimony",
+    label: "Written Testimony",
+    icon: <FileText className="w-5 h-5" />,
+    desc: "A written account or statement",
+  },
+  {
+    value: "package",
+    label: "Evidence Package",
+    icon: <Upload className="w-5 h-5" />,
+    desc: "Multiple files bundled together",
+  },
+];
 
 export default function CreateRecord() {
   const { toast } = useToast();
@@ -35,14 +80,12 @@ export default function CreateRecord() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [recordType, setRecordType] = useState<RecordType>("file");
-  
-  // Step 1 State
+
   const [files, setFiles] = useState<File[]>([]);
   const [testimony, setTestimony] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileEntries, setFileEntries] = useState<FileHashEntry[]>([]);
-  
-  // Step 2 State
+
   const [eventType, setEventType] = useState("");
   const [evidenceType, setEvidenceType] = useState("");
   const [country, setCountry] = useState("");
@@ -51,13 +94,12 @@ export default function CreateRecord() {
   const [publicNote, setPublicNote] = useState("");
   const [noteWarning, setNoteWarning] = useState<string | null>(null);
 
-  // Step 3 State
-  const [manifest, setManifest] = useState<any>(null);
+  const [manifest, setManifest] = useState<Record<string, unknown> | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files);
-      setFiles(recordType === "package" ? [...files, ...selectedFiles] : [selectedFiles[0]]);
+      const selected = Array.from(e.target.files);
+      setFiles(recordType === "package" ? [...files, ...selected] : [selected[0]]);
     }
   };
 
@@ -65,20 +107,16 @@ export default function CreateRecord() {
     setFiles(files.filter((_, i) => i !== index));
   };
 
-  const checkNoteSafety = (text: string) => {
-    const phoneRegex = /\d[\d\s\-\.]{7,}/;
-    const gpsRegex = /\d+\.\d+,\s*\d+\.\d+/;
+  const checkNoteSafety = (text: string): string | null => {
+    if (/\d[\d\s\-.]{7,}/.test(text))
+      return "Warning: Phone numbers detected in public note.";
+    if (/\d+\.\d+,\s*\d+\.\d+/.test(text))
+      return "Warning: GPS coordinates detected in public note.";
     const capsWords = text.match(/\b[A-Z][a-z]+\b/g) || [];
-    
-    if (phoneRegex.test(text)) return "Warning: Phone numbers detected in public note.";
-    if (gpsRegex.test(text)) return "Warning: GPS coordinates detected in public note.";
-    if (capsWords.length > 5) return "Warning: Many capitalized words detected. Ensure no full names are included.";
-    
-    const violentPhrases = ["go kill", "murder", "assassinate"];
-    if (violentPhrases.some(phrase => text.toLowerCase().includes(phrase))) {
+    if (capsWords.length > 5)
+      return "Warning: Many capitalized words detected. Ensure no full names are included.";
+    if (["go kill", "murder", "assassinate"].some((p) => text.toLowerCase().includes(p)))
       return "Warning: Note contains flagged phrases.";
-    }
-
     return null;
   };
 
@@ -92,35 +130,33 @@ export default function CreateRecord() {
     setIsProcessing(true);
     try {
       const entries: FileHashEntry[] = [];
-      
       for (const file of files) {
         const buffer = await file.arrayBuffer();
         const hash = await sha256(buffer);
         const nameHash = await sha256(file.name);
-        
-        let descriptor: any = {
+        const descriptor: FileHashEntry["safeDescriptor"] = {
           fileSizeBucket: formatFileSizeBucket(file.size),
-          mediaType: file.type || "unknown"
+          mediaType: file.type || "unknown",
         };
 
         if (file.type.startsWith("image/")) {
           try {
             const exifr = await import("exifr");
             const exif = await exifr.parse(file, { gps: true, tiff: true });
-            descriptor.gpsMetadata = !!(exif?.latitude || exif?.longitude || exif?.GPSLatitude) ? "present" : "absent";
+            descriptor.gpsMetadata = !!(exif?.latitude || exif?.longitude || exif?.GPSLatitude)
+              ? "present"
+              : "absent";
             descriptor.exifMetadata = "present";
-            
-            // basic resolution attempt
             const img = new Image();
             img.src = URL.createObjectURL(file);
-            await new Promise((resolve) => {
-              img.onload = resolve;
-              img.onerror = resolve;
+            await new Promise((res) => {
+              img.onload = res;
+              img.onerror = res;
             });
             if (img.width && img.height) {
               descriptor.resolutionBucket = `${img.width}x${img.height}`;
             }
-          } catch (e) {
+          } catch {
             descriptor.exifMetadata = "unknown";
             descriptor.gpsMetadata = "unknown";
           }
@@ -128,12 +164,16 @@ export default function CreateRecord() {
           try {
             const duration = await detectVideoDuration(file);
             descriptor.durationBucket = formatDurationBucket(duration);
-          } catch (e) {}
+          } catch {
+            // ignore
+          }
         } else if (file.type.startsWith("audio/")) {
           try {
             const duration = await detectAudioDuration(file);
             descriptor.durationBucket = formatDurationBucket(duration);
-          } catch (e) {}
+          } catch {
+            // ignore
+          }
         }
 
         entries.push({
@@ -141,14 +181,17 @@ export default function CreateRecord() {
           mimeType: file.type || "application/octet-stream",
           sizeBytes: file.size,
           sha256: hash,
-          safeDescriptor: descriptor
+          safeDescriptor: descriptor,
         });
       }
       setFileEntries(entries);
       setStep(2);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error processing files", description: "Could not hash files.", variant: "destructive" });
+    } catch {
+      toast({
+        title: "Error processing files",
+        description: "Could not hash files.",
+        variant: "destructive",
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -159,25 +202,25 @@ export default function CreateRecord() {
     try {
       const hash = await sha256(testimony);
       const wordCount = testimony.trim().split(/\s+/).length;
-      
       let lang = "unknown";
       if (/[\u0600-\u06FF]/.test(testimony)) lang = "Arabic";
       else if (/[a-zA-Z]/.test(testimony)) lang = "English";
 
-      setFileEntries([{
-        nameHash: await sha256("testimony.txt"),
-        mimeType: "text/plain",
-        sizeBytes: new Blob([testimony]).size,
-        sha256: hash,
-        safeDescriptor: {
-          mediaType: "text/plain",
-          wordCount: wordCount,
-          language: lang
-        } as any
-      }]);
+      setFileEntries([
+        {
+          nameHash: await sha256("testimony.txt"),
+          mimeType: "text/plain",
+          sizeBytes: new Blob([testimony]).size,
+          sha256: hash,
+          safeDescriptor: {
+            mediaType: "text/plain",
+            wordCount,
+            language: lang,
+          },
+        },
+      ]);
       setStep(2);
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast({ title: "Error processing testimony", variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -186,51 +229,57 @@ export default function CreateRecord() {
 
   const generateManifest = async () => {
     if (noteWarning) {
-      toast({ title: "Resolve warnings", description: "Please resolve privacy warnings in your note.", variant: "destructive" });
+      toast({
+        title: "Resolve warnings",
+        description: "Please resolve privacy warnings in your note.",
+        variant: "destructive",
+      });
       return;
     }
 
     const baseManifest = {
       protocol: "silent-witness-v0.1",
-      recordType: recordType === "file" ? "file_hash" : recordType === "testimony" ? "testimony_hash" : "package_hash",
+      recordType:
+        recordType === "file"
+          ? "file_hash"
+          : recordType === "testimony"
+          ? "testimony_hash"
+          : "package_hash",
       eventType: eventType || "withheld",
       evidenceType: evidenceType || "withheld",
       privacy: "details_withheld",
       location: {
         country: country || "withheld",
         region: region || "withheld",
-        city: city || "withheld"
+        city: city || "withheld",
       },
-      safeDescriptor: fileEntries.length === 1 ? fileEntries[0].safeDescriptor : {
-        mediaType: "package",
-        fileCount: fileEntries.length
-      },
+      safeDescriptor:
+        fileEntries.length === 1
+          ? fileEntries[0].safeDescriptor
+          : { mediaType: "package", fileCount: fileEntries.length },
       fileHashes: fileEntries,
       createdAtUtc: new Date().toISOString(),
       status: "timestamped_only_not_verified",
-      publicWarning: "Original evidence is not shared. This record does not prove guilt or truth.",
-      privateNote: publicNote || undefined
+      publicWarning:
+        "Original evidence is not shared. This record does not prove guilt or truth.",
+      privateNote: publicNote || undefined,
     };
 
     const manifestString = JSON.stringify(baseManifest, null, 2);
     const packageHash = await sha256(manifestString);
-
-    const finalManifest = {
-      ...baseManifest,
-      packageHash
-    };
-
-    setManifest(finalManifest);
+    setManifest({ ...baseManifest, packageHash });
     setStep(3);
   };
 
   const downloadJson = () => {
     if (!manifest) return;
-    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(manifest, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `witness-record-${manifest.packageHash.substring(0, 8)}.json`;
+    a.download = `witness-record-${String(manifest.packageHash).substring(0, 8)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -239,158 +288,249 @@ export default function CreateRecord() {
 
   const copyPublicRecord = () => {
     if (!manifest) return;
-    const publicManifest = { ...manifest };
-    delete publicManifest.privateNote; // Remove private note
-    navigator.clipboard.writeText(JSON.stringify(publicManifest, null, 2));
+    const pub = { ...manifest };
+    delete pub.privateNote;
+    navigator.clipboard.writeText(JSON.stringify(pub, null, 2));
     toast({ title: "Copied", description: "Public record copied to clipboard." });
   };
 
   const shareToTelegram = () => {
     if (!manifest) return;
-    const text = `Silent Witness Record\nEvent: ${manifest.eventType}\nLocation: ${manifest.location.country}\nHash: ${manifest.packageHash}\nStatus: Timestamped only, not publicly verified.\nOriginal evidence is not shared.`;
-    const url = `https://t.me/share/url?url=${encodeURIComponent("https://silentwitness.org")}&text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    const loc = manifest.location as { country: string };
+    const text = `Silent Witness Record\nEvent: ${manifest.eventType}\nLocation: ${loc.country}\nHash: ${manifest.packageHash}\nStatus: Timestamped only, not publicly verified.\nOriginal evidence is not shared.`;
+    window.open(
+      `https://t.me/share/url?url=${encodeURIComponent("https://silentwitness.org")}&text=${encodeURIComponent(text)}`,
+      "_blank"
+    );
   };
 
   const submitToRegistry = () => {
     if (!manifest) return;
-    const publicManifest = { ...manifest };
-    delete publicManifest.privateNote; // IMPORTANT: Do not send private note
+    const pub = { ...manifest };
+    delete pub.privateNote;
+    const loc = pub.location as { country: string; region: string; city: string };
 
-    const payload = {
-      packageHash: publicManifest.packageHash,
-      eventType: publicManifest.eventType,
-      evidenceType: publicManifest.evidenceType,
-      country: publicManifest.location.country !== "withheld" ? publicManifest.location.country : null,
-      region: publicManifest.location.region !== "withheld" ? publicManifest.location.region : null,
-      city: publicManifest.location.city !== "withheld" ? publicManifest.location.city : null,
-      safeDescriptor: publicManifest.safeDescriptor,
-      status: publicManifest.status,
-      qualityLevel: recordType === "package" ? "A" : recordType === "file" ? "B" : "C",
-      publicWarning: publicManifest.publicWarning,
-      createdAtUtc: publicManifest.createdAtUtc
-    };
-
-    createRecord.mutate({ data: payload }, {
-      onSuccess: () => {
-        toast({ title: "Submitted", description: "Public fingerprint added to registry." });
+    createRecord.mutate(
+      {
+        data: {
+          packageHash: String(pub.packageHash),
+          eventType: String(pub.eventType),
+          evidenceType: String(pub.evidenceType),
+          country: loc.country !== "withheld" ? loc.country : null,
+          region: loc.region !== "withheld" ? loc.region : null,
+          city: loc.city !== "withheld" ? loc.city : null,
+          safeDescriptor: pub.safeDescriptor as object,
+          status: String(pub.status),
+          qualityLevel: recordType === "package" ? "A" : recordType === "file" ? "B" : "C",
+          publicWarning: String(pub.publicWarning),
+          createdAtUtc: String(pub.createdAtUtc),
+        },
       },
-      onError: () => {
-        toast({ title: "Submission failed", variant: "destructive" });
+      {
+        onSuccess: () =>
+          toast({ title: "Submitted", description: "Public fingerprint added to registry." }),
+        onError: () =>
+          toast({ title: "Submission failed", variant: "destructive" }),
       }
-    });
+    );
   };
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto px-4 py-12">
-        <div className="mb-8">
-          <h1 className="text-3xl font-serif text-primary tracking-tight mb-2">Create Witness Record</h1>
-          <p className="text-muted-foreground">Generate a cryptographic fingerprint without exposing the original data.</p>
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-serif text-primary tracking-tight mb-2">
+            Create Witness Record
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Generate a cryptographic fingerprint without exposing the original data.
+          </p>
         </div>
 
-        <div className="flex items-center gap-4 mb-8">
-          <div className={`flex-1 h-2 rounded-full ${step >= 1 ? "bg-primary" : "bg-muted"}`} />
-          <div className={`flex-1 h-2 rounded-full ${step >= 2 ? "bg-primary" : "bg-muted"}`} />
-          <div className={`flex-1 h-2 rounded-full ${step >= 3 ? "bg-primary" : "bg-muted"}`} />
+        {/* Progress bar */}
+        <div className="flex items-center gap-2 mb-6 sm:mb-8">
+          {[1, 2, 3].map((s) => (
+            <React.Fragment key={s}>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    step >= s
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {s}
+                </div>
+                <span
+                  className={`text-xs hidden sm:block ${
+                    step >= s ? "text-foreground font-medium" : "text-muted-foreground"
+                  }`}
+                >
+                  {s === 1 ? "Choose Type" : s === 2 ? "Public Context" : "Generate"}
+                </span>
+              </div>
+              {s < 3 && (
+                <div
+                  className={`flex-1 h-1 rounded-full ${
+                    step > s ? "bg-primary" : "bg-muted"
+                  }`}
+                />
+              )}
+            </React.Fragment>
+          ))}
         </div>
 
-        <Alert className="mb-8 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900">
-          <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          <AlertTitle className="text-blue-800 dark:text-blue-300 font-semibold">Processing locally. Your file is not uploaded.</AlertTitle>
-          <AlertDescription className="text-blue-700/80 dark:text-blue-400/80">
+        <Alert className="mb-6 sm:mb-8 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900">
+          <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <AlertTitle className="text-blue-800 dark:text-blue-300 font-semibold text-sm">
+            Processing locally. Your file is not uploaded.
+          </AlertTitle>
+          <AlertDescription className="text-blue-700/80 dark:text-blue-400/80 text-xs sm:text-sm">
             All cryptographic operations happen in your browser memory.
           </AlertDescription>
         </Alert>
 
+        {/* STEP 1 */}
         {step === 1 && (
-          <div className="space-y-6 bg-card border border-border p-6 rounded-lg">
-            <h2 className="text-xl font-semibold">Step 1: Choose Record Type</h2>
-            
-            <Tabs value={recordType} onValueChange={(v: string) => setRecordType(v as RecordType)}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="file">File Evidence</TabsTrigger>
-                <TabsTrigger value="testimony">Written Testimony</TabsTrigger>
-                <TabsTrigger value="package">Evidence Package</TabsTrigger>
-              </TabsList>
-              
-              <div className="mt-6">
-                {(recordType === "file" || recordType === "package") && (
-                  <div className="space-y-4">
-                    <Label>Select {recordType === "package" ? "multiple files" : "a file"} (Local only)</Label>
-                    <Input 
-                      type="file" 
+          <div className="space-y-5 bg-card border border-border p-4 sm:p-6 rounded-lg">
+            <h2 className="text-lg sm:text-xl font-semibold">
+              Step 1: Choose Record Type
+            </h2>
+
+            {/* Record type selector */}
+            <div className="grid gap-2 sm:grid-cols-3">
+              {RECORD_TYPES.map(({ value, label, icon, desc }) => (
+                <button
+                  key={value}
+                  onClick={() => setRecordType(value)}
+                  className={`flex flex-col items-start sm:items-center sm:text-center gap-2 p-3 sm:p-4 rounded-lg border-2 transition-colors text-left ${
+                    recordType === value
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40 hover:bg-muted"
+                  }`}
+                  data-testid={`button-record-type-${value}`}
+                >
+                  <div className={recordType === value ? "text-primary" : "text-muted-foreground"}>
+                    {icon}
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">{label}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 hidden sm:block">{desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2">
+              {(recordType === "file" || recordType === "package") && (
+                <div className="space-y-4">
+                  <div>
+                    <Label className="mb-1.5 block">
+                      Select {recordType === "package" ? "multiple files" : "a file"}{" "}
+                      <span className="text-muted-foreground font-normal">(stays on your device)</span>
+                    </Label>
+                    <Input
+                      type="file"
                       multiple={recordType === "package"}
                       onChange={handleFileChange}
                       disabled={isProcessing}
+                      data-testid="input-file"
                     />
-                    
-                    {files.length > 0 && (
-                      <div className="text-sm text-muted-foreground space-y-2">
-                        {files.map((f, i) => (
-                          <div key={i} className="flex justify-between items-center bg-muted p-2 rounded">
-                            <span className="truncate max-w-[200px]">{f.name}</span>
-                            <span>{formatFileSizeBucket(f.size)}</span>
+                  </div>
+
+                  {files.length > 0 && (
+                    <div className="space-y-2">
+                      {files.map((f, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between gap-2 bg-muted p-2.5 rounded text-sm"
+                        >
+                          <span className="truncate min-w-0 text-xs sm:text-sm">{f.name}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs text-muted-foreground">
+                              {formatFileSizeBucket(f.size)}
+                            </span>
                             {recordType === "package" && (
-                              <Button variant="ghost" size="sm" onClick={() => removeFile(i)}>Remove</Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => removeFile(i)}
+                              >
+                                Remove
+                              </Button>
                             )}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                    <Button 
-                      className="w-full mt-4" 
-                      disabled={files.length === 0 || isProcessing}
-                      onClick={processFiles}
-                    >
-                      {isProcessing ? "Processing..." : "Process Fingerprint"}
-                      {!isProcessing && <ArrowRight className="w-4 h-4 ml-2" />}
-                    </Button>
-                  </div>
-                )}
+                  <Button
+                    className="w-full"
+                    disabled={files.length === 0 || isProcessing}
+                    onClick={processFiles}
+                    data-testid="button-process-fingerprint"
+                  >
+                    {isProcessing ? "Processing..." : "Process Fingerprint"}
+                    {!isProcessing && <ArrowRight className="w-4 h-4 ml-2" />}
+                  </Button>
+                </div>
+              )}
 
-                {recordType === "testimony" && (
-                  <div className="space-y-4">
-                    <Label>Write testimony</Label>
-                    <Textarea 
-                      rows={10} 
+              {recordType === "testimony" && (
+                <div className="space-y-4">
+                  <div>
+                    <Label className="mb-1.5 block">Write testimony</Label>
+                    <Textarea
+                      rows={8}
                       placeholder="Write your account here..."
                       value={testimony}
                       onChange={(e) => setTestimony(e.target.value)}
                       disabled={isProcessing}
+                      data-testid="textarea-testimony"
+                      className="text-sm"
                     />
-                    <div className="text-xs text-muted-foreground text-right">
-                      Word count: {testimony.trim().split(/\s+/).filter(Boolean).length}
+                    <div className="text-xs text-muted-foreground text-right mt-1">
+                      {testimony.trim().split(/\s+/).filter(Boolean).length} words
                     </div>
-                    
-                    <Button 
-                      className="w-full mt-4" 
-                      disabled={testimony.trim().length === 0 || isProcessing}
-                      onClick={processTestimony}
-                    >
-                      {isProcessing ? "Processing..." : "Process Fingerprint"}
-                      {!isProcessing && <ArrowRight className="w-4 h-4 ml-2" />}
-                    </Button>
                   </div>
-                )}
-              </div>
-            </Tabs>
+
+                  <Button
+                    className="w-full"
+                    disabled={testimony.trim().length === 0 || isProcessing}
+                    onClick={processTestimony}
+                    data-testid="button-process-testimony"
+                  >
+                    {isProcessing ? "Processing..." : "Process Fingerprint"}
+                    {!isProcessing && <ArrowRight className="w-4 h-4 ml-2" />}
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
+        {/* STEP 2 */}
         {step === 2 && (
-          <div className="space-y-6 bg-card border border-border p-6 rounded-lg">
-            <h2 className="text-xl font-semibold">Step 2: Safe Public Context</h2>
-            <p className="text-sm text-muted-foreground">
-              Provide general context. Do not include precise locations, names, or contact info. This metadata will be public.
-            </p>
+          <div className="space-y-5 bg-card border border-border p-4 sm:p-6 rounded-lg">
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold">
+                Step 2: Safe Public Context
+              </h2>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                Provide general context only. No precise locations, names, or contact info. This
+                metadata will be public.
+              </p>
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Event Type</Label>
                 <Select value={eventType} onValueChange={setEventType}>
-                  <SelectTrigger><SelectValue placeholder="Select event type" /></SelectTrigger>
+                  <SelectTrigger data-testid="select-event-type">
+                    <SelectValue placeholder="Select event type" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="kidnapping">Kidnapping</SelectItem>
                     <SelectItem value="killing">Killing</SelectItem>
@@ -405,10 +545,12 @@ export default function CreateRecord() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Evidence Type</Label>
                 <Select value={evidenceType} onValueChange={setEvidenceType}>
-                  <SelectTrigger><SelectValue placeholder="Select evidence type" /></SelectTrigger>
+                  <SelectTrigger data-testid="select-evidence-type">
+                    <SelectValue placeholder="Select evidence type" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="video">Video</SelectItem>
                     <SelectItem value="image">Image</SelectItem>
@@ -421,75 +563,157 @@ export default function CreateRecord() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>Country (Optional)</Label>
-                <Input value={country} onChange={e => setCountry(e.target.value)} placeholder="Broad region only" />
+              <div className="space-y-1.5">
+                <Label>
+                  Country{" "}
+                  <span className="text-muted-foreground font-normal">(Optional)</span>
+                </Label>
+                <Input
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="Broad region only"
+                  data-testid="input-country"
+                />
               </div>
-              <div className="space-y-2">
-                <Label>Region/Province (Optional)</Label>
-                <Input value={region} onChange={e => setRegion(e.target.value)} />
+              <div className="space-y-1.5">
+                <Label>
+                  Region/Province{" "}
+                  <span className="text-muted-foreground font-normal">(Optional)</span>
+                </Label>
+                <Input
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  data-testid="input-region"
+                />
               </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>City (Optional)</Label>
-                <Input value={city} onChange={e => setCity(e.target.value)} />
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>
+                  City{" "}
+                  <span className="text-muted-foreground font-normal">(Optional)</span>
+                </Label>
+                <Input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  data-testid="input-city"
+                />
               </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Public Note (Optional)</Label>
-                <Textarea 
-                  value={publicNote} 
-                  onChange={handleNoteChange} 
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>
+                  Public Note{" "}
+                  <span className="text-muted-foreground font-normal">(Optional)</span>
+                </Label>
+                <Textarea
+                  value={publicNote}
+                  onChange={handleNoteChange}
                   placeholder="Describe the context without identifying details..."
+                  data-testid="textarea-public-note"
+                  className="text-sm"
+                  rows={3}
                 />
                 {noteWarning && (
-                  <div className="text-destructive text-sm flex items-center gap-1 mt-1">
-                    <AlertTriangle className="w-4 h-4" /> {noteWarning}
+                  <div className="text-destructive text-xs sm:text-sm flex items-start gap-1.5 mt-1">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    {noteWarning}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t border-border">
-              <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-              <Button onClick={generateManifest} className="flex-1" disabled={!!noteWarning}>
+            <div className="flex gap-3 pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={() => setStep(1)}
+                data-testid="button-back"
+              >
+                Back
+              </Button>
+              <Button
+                onClick={generateManifest}
+                className="flex-1"
+                disabled={!!noteWarning}
+                data-testid="button-generate-manifest"
+              >
                 Generate Manifest
               </Button>
             </div>
           </div>
         )}
 
+        {/* STEP 3 */}
         {step === 3 && manifest && (
-          <div className="space-y-6">
-            <div className="bg-card border border-border p-6 rounded-lg text-center space-y-4">
-              <Check className="w-12 h-12 text-primary mx-auto" />
-              <h2 className="text-2xl font-serif text-primary">Fingerprint Created</h2>
-              <p className="text-muted-foreground">Original stays on your device. Fingerprint only.</p>
-              
-              <div className="bg-muted p-4 rounded text-left overflow-x-auto">
-                <Label className="text-muted-foreground mb-1 block">Package Hash</Label>
-                <code className="text-lg font-mono">{manifest.packageHash}</code>
+          <div className="space-y-5">
+            <div className="bg-card border border-border p-4 sm:p-6 rounded-lg text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                <Check className="w-6 h-6 text-primary" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-serif text-primary">
+                Fingerprint Created
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Original stays on your device. Fingerprint only.
+              </p>
+
+              <div className="bg-muted p-3 sm:p-4 rounded text-left overflow-hidden">
+                <Label className="text-muted-foreground mb-1 block text-xs uppercase tracking-wide">
+                  Package Hash
+                </Label>
+                <code
+                  className="text-xs sm:text-sm font-mono break-all block leading-relaxed"
+                  data-testid="text-package-hash"
+                >
+                  {String(manifest.packageHash)}
+                </code>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Button variant="outline" className="h-16 flex flex-col items-center justify-center gap-1" onClick={downloadJson}>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1"
+                onClick={downloadJson}
+                data-testid="button-download-json"
+              >
                 <Download className="w-4 h-4" />
-                <span className="text-xs">Download Proof Package</span>
+                <span className="text-xs leading-tight text-center">
+                  Download Proof Package
+                </span>
               </Button>
-              <Button variant="outline" className="h-16 flex flex-col items-center justify-center gap-1" onClick={copyPublicRecord}>
+              <Button
+                variant="outline"
+                className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1"
+                onClick={copyPublicRecord}
+                data-testid="button-copy-record"
+              >
                 <Copy className="w-4 h-4" />
-                <span className="text-xs">Copy Public Record</span>
+                <span className="text-xs leading-tight text-center">
+                  Copy Public Record
+                </span>
               </Button>
-              <Button variant="outline" className="h-16 flex flex-col items-center justify-center gap-1" onClick={shareToTelegram}>
+              <Button
+                variant="outline"
+                className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1"
+                onClick={shareToTelegram}
+                data-testid="button-share-telegram"
+              >
                 <Share2 className="w-4 h-4" />
-                <span className="text-xs">Share to Telegram</span>
+                <span className="text-xs leading-tight text-center">
+                  Share to Telegram
+                </span>
               </Button>
-              <Button className="h-16 flex flex-col items-center justify-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90" onClick={submitToRegistry} disabled={createRecord.isPending}>
+              <Button
+                className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={submitToRegistry}
+                disabled={createRecord.isPending}
+                data-testid="button-submit-registry"
+              >
                 <Upload className="w-4 h-4" />
-                <span className="text-xs">{createRecord.isPending ? "Submitting..." : "Submit to Public Registry"}</span>
+                <span className="text-xs leading-tight text-center">
+                  {createRecord.isPending ? "Submitting..." : "Submit to Registry"}
+                </span>
               </Button>
             </div>
-            
-            <div className="text-center text-sm text-muted-foreground mt-8">
+
+            <div className="text-center text-xs sm:text-sm text-muted-foreground pt-2">
               A fingerprint is not proof that an event happened.
             </div>
           </div>
