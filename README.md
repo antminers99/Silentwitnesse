@@ -30,7 +30,7 @@ In conflict zones and high-risk environments, uploading evidence directly to a p
 1. **Choose a file** — image, video, audio, document, or written testimony. It stays on your device.
 2. **Browser computes SHA-256** — all cryptographic operations happen locally in your browser using the Web Crypto API. Nothing is uploaded.
 3. **Submit the fingerprint** — only the hash and safe public metadata are sent to the server. The original never leaves your device.
-4. **Reviewer approval** — a reviewer checks that the metadata is safe before the record appears in the public registry.
+4. **Automatic policy check** — the server validates the submission against safety and quality rules. Records that pass appear immediately in the public registry with no manual review step.
 5. **Verification** — anyone with the original file can later compute its hash and compare it against the registry.
 
 ## What It Proves
@@ -51,11 +51,10 @@ In conflict zones and high-risk environments, uploading evidence directly to a p
 ## Main Features
 
 - **Local hashing only** — SHA-256 computed in the browser using Web Crypto API. No file upload.
-- **Public fingerprint registry** — timestamped, reviewer-approved records.
+- **Automatic policy registry** — fingerprints that pass all policy checks appear immediately in the public registry. No manual review.
 - **Safe descriptor** — limited metadata (file size bucket, duration bucket, resolution bucket) with no exact coordinates, names, or identifying info.
 - **Retraction token** — holders can remove their public record using a token saved in their local proof package.
 - **Verification page** — compare a local file against a hash or a manifest.
-- **Review dashboard** — admin interface to approve, reject, or hide records before they appear publicly.
 
 ---
 
@@ -96,8 +95,7 @@ See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full model.
 - Accidental publication of identifying metadata (server-side validation rejects unsafe content)
 
 **What the tool does NOT protect against:**
-- A compromised server disclosing pending record metadata
-- A coerced or malicious reviewer exposing submissions
+- A compromised server disclosing record metadata
 - Network-level interception of the submission request
 - A user submitting dangerous metadata themselves
 
@@ -110,38 +108,25 @@ User (browser)                     Server
 ──────────────                     ──────
 1. Select file                     
 2. Compute SHA-256 locally         
-3. Build manifest                  
-4. Submit fingerprint ──────────▶  Sets pending_review
-                                   Stores fingerprint + safe metadata
+3. Build manifest locally          
+4. Submit fingerprint ──────────▶  Runs automatic policy checks
+                                   Quality D → 400 rejected_by_policy
+                                   Unsafe location → 400 rejected_by_policy
+                                   Pass → accepted_public (immediately public)
 5. Download proof package          
    (includes retraction token)     
-                                   Reviewer approves ──▶ public_timestamped_record
-                                   Reviewer rejects  ──▶ rejected_for_public_registry
 6. Public registry shows           
-   only approved records           
+   all accepted_public records     
 ```
 
 ### Publication Status Vocabulary
 
 | Status | Public? | Meaning |
 |---|---|---|
-| `pending_review` | No | Submitted, awaiting reviewer |
-| `public_timestamped_record` | Yes | Approved — visible in registry |
-| `rejected_for_public_registry` | No | Rejected or hidden by reviewer |
+| `accepted_public` | Yes | Passed all policy checks — immediately visible in registry |
+| `rejected_by_policy` | No | Failed safety or quality check — never stored |
 | `retracted_by_holder` | No | Holder used retraction token |
-| `exact_match_published` | Yes | Later file verified as identical |
-
----
-
-## Reviewer / Admin Workflow
-
-- Route: `/admin/review`
-- Authentication: `ADMIN_REVIEW_PASSWORD` environment variable
-- Actions: Approve, Reject (reason required), Hide
-- All actions are logged to the `review_actions` table
-- Reviewers see only fingerprints and safe metadata — no original files exist
-
-Reviewer approval is a **safety review**, not a truth or authenticity verification.
+| `exact_match_published` | Yes | Later file verified as byte-for-byte identical |
 
 ---
 
@@ -218,7 +203,7 @@ pnpm install
 
 # Copy environment variables
 cp .env.example .env
-# Fill in DATABASE_URL and ADMIN_REVIEW_PASSWORD
+# Fill in DATABASE_URL and SESSION_SECRET
 
 # Push database schema
 pnpm --filter @workspace/db run push
@@ -245,7 +230,6 @@ See [.env.example](.env.example) for all variables with comments.
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `ADMIN_REVIEW_PASSWORD` | Yes | Password for `/admin/review` dashboard |
 | `PUBLIC_APP_ORIGIN` | Prod | Allowed CORS origins (comma-separated) |
 | `SESSION_SECRET` | Yes | Session signing secret |
 | `PORT` | Yes | API server port |
@@ -273,7 +257,6 @@ pnpm --filter @workspace/db run push
 | Create Witness Record | *(screenshot placeholder)* |
 | Public Registry | *(screenshot placeholder)* |
 | Verify Evidence | *(screenshot placeholder)* |
-| Review Dashboard | *(screenshot placeholder)* |
 
 ---
 

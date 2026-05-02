@@ -72,7 +72,6 @@ The `packageHash` is the SHA-256 of the canonical manifest JSON string, computed
 |---|---|---|
 | `createdAtLocal` | User's browser clock | **Not independently verified.** Comes from the device. Displayed with a warning to viewers. |
 | `serverReceivedAtUtc` | Server clock at the time of POST | **Authoritative.** The registry received the fingerprint by this time. Cannot be set or overridden by the client. |
-| `approvedAtUtc` | Server clock when reviewer approves | **Authoritative.** Set by the server only. |
 
 ---
 
@@ -99,23 +98,23 @@ Fields that are NOT stored: exact GPS coordinates, device model, manufacturer, s
 
 | Status | Visible publicly | Description |
 |---|---|---|
-| `pending_review` | No | Submitted, awaiting reviewer |
-| `public_timestamped_record` | Yes | Approved by reviewer |
-| `rejected_for_public_registry` | No | Rejected or hidden |
-| `retracted_by_holder` | No | Holder used retraction token |
-| `exact_match_published` | Yes | Later file verified as byte-for-byte identical |
+| `accepted_public` | Yes | Passed all automatic policy checks — immediately visible in registry |
+| `rejected_by_policy` | No | Failed safety or quality checks — never stored or shown publicly |
+| `retracted_by_holder` | No | Holder used retraction token to remove record |
+| `exact_match_published` | Yes | A later file was verified as byte-for-byte identical |
 
 ---
 
-## Review Process
+## Automatic Publication Process
 
-1. User submits fingerprint → server sets `publication_status = pending_review`
-2. Reviewer accesses `/admin/review` with the admin password
-3. Reviewer sees only fingerprints and safe metadata — no original files exist
-4. Reviewer approves, rejects (with reason), or hides the record
-5. All reviewer actions are logged to the `review_actions` table
+Records are published automatically on submission with no human review step:
 
-**Reviewer approval is a safety review only.** It is not an authentication of the event or the file's content.
+1. Client submits fingerprint → server validates format and runs policy checks
+2. **Policy checks:** quality level (must be A/B/C), location field safety (no PII patterns), rate limit (10/IP/hour), duplicate detection
+3. **Pass:** `publication_status = accepted_public` — immediately visible in public registry
+4. **Fail:** HTTP 400 with `status: rejected_by_policy` and a reason — record is not stored
+
+There is no manual reviewer, no admin dashboard, and no pending state.
 
 ---
 
@@ -149,7 +148,7 @@ POST /api/retract
 { "packageHash": "...", "retractionToken": "<raw UUID from proof package>" }
 ```
 
-The server computes `sha256("sw-retract:" + token)` and compares it with the stored hash using a timing-safe comparison.
+The server computes `sha256("sw-retract:" + token)` and compares it with the stored hash using a timing-safe comparison (`crypto.timingSafeEqual`). Retraction attempts are rate-limited to 5 per package hash per 15 minutes.
 
 ---
 
@@ -160,7 +159,7 @@ The server computes `sha256("sw-retract:" + token)` and compares it with the sto
 | A | Known event type + known evidence type + has descriptor |
 | B | Known evidence type or known event type + has descriptor |
 | C | Both withheld but has a safe descriptor |
-| D | No meaningful descriptor or both withheld with no context — **rejected from public registry** |
+| D | No meaningful descriptor or both withheld with no context — **automatically rejected** |
 
 ---
 
@@ -170,4 +169,4 @@ The server computes `sha256("sw-retract:" + token)` and compares it with the sto
 - `createdAtLocal` comes from the user's device clock and is not independently verified.
 - Exact matching requires the byte-for-byte original file, not a compressed or re-encoded copy.
 - The tool does not prove events, guilt, or legal admissibility.
-- The public registry shows only records approved by a human reviewer.
+- The public registry shows only records that passed automatic policy checks. No human authentication is performed.
