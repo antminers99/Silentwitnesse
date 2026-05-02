@@ -207,10 +207,6 @@ export default function Verify() {
                   </div>
                 </>
               )}
-              <p className="text-xs opacity-60 border-t border-current/20 pt-3 w-full">
-                Careful wording: "Exact cryptographic match" — not "verified"
-                or "proven truth".
-              </p>
             </div>
           )}
         </div>
