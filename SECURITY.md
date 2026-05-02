@@ -6,7 +6,7 @@ If you discover a security vulnerability in Silent Witness, **do not open a publ
 
 Vulnerabilities that could expose witnesses, users, private metadata, retraction tokens, or unpublished records must be reported privately.
 
-**Security contact:** [add contact email]
+**Security contact:** Use [GitHub Security Advisories](https://github.com/antminers99/Silentwitnesse/security/advisories/new) to report vulnerabilities privately.
 
 Please include:
 - A clear description of the vulnerability
@@ -21,8 +21,7 @@ We will acknowledge your report within 72 hours and aim to resolve confirmed iss
 ## What Not to Submit Publicly
 
 Do not open public issues for:
-- Authentication bypass or admin access vulnerabilities
-- Exposure of pending, rejected, or retracted record metadata
+- Exposure of rejected or retracted record metadata
 - Retraction token extraction or bypass
 - Server-side injection vulnerabilities
 - Any finding that could be used to identify or endanger a witness
@@ -43,13 +42,13 @@ These are known limitations of the current MVP. They are documented here for tra
 
 1. **Rate limiting is in-memory.** It resets on server restart. This makes it easier to submit spam records after a restart.
 
-2. **Admin authentication is a single shared password with brute-force protection.** It is not a session-based or hardware-backed credential. IP-based lockout is in memory.
+2. **No persistent session tracking.** Retraction token brute-force protection is in-memory and resets on server restart.
 
-3. **Reviewer trust.** A reviewer with the admin password can see pending record metadata before public approval. This is by design (review is required before publication) but requires trusting the reviewer.
+3. **`createdAtLocal` is not trusted.** It comes from the user's device clock and is displayed with a warning. The authoritative timestamp is `serverReceivedAtUtc`.
 
-4. **Server compromise.** If the database or server is fully compromised, pending record metadata could be exposed. Original files are never stored, so original evidence cannot be leaked from the server.
+4. **Server compromise.** If the database or server is fully compromised, record metadata could be exposed. Original files are never stored, so original evidence cannot be leaked from the server.
 
-5. **`createdAtLocal` is not trusted.** It comes from the user's device clock and is displayed with a warning. The authoritative timestamp is `serverReceivedAtUtc`.
+5. **Automatic policy, not human review.** Records pass or fail safety checks automatically. A sophisticated attacker who understands the policy rules may be able to craft inputs that pass checks despite being unsafe. Future versions will add additional layers.
 
 ---
 
@@ -57,9 +56,10 @@ These are known limitations of the current MVP. They are documented here for tra
 
 In scope for vulnerability reports:
 - API endpoints that expose non-public record metadata
-- Authentication bypass
+- Retraction token bypass or extraction
 - Injection vulnerabilities
 - CORS misconfiguration allowing cross-origin data access
+- Safety policy bypass (submitting records that should be rejected but are not)
 - Any finding that could endanger a witness or expose private data
 
 Out of scope:
