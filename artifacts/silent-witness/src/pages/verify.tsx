@@ -1,61 +1,600 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, CheckCircle2, XCircle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Search,
+  CheckCircle2,
+  XCircle,
+  FileJson,
+  Hash,
+  ShieldCheck,
+  Loader2,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 import { sha256 } from "@/lib/crypto";
 
-export default function Verify() {
-  const [expectedHash, setExpectedHash] = useState("");
-  const [fileToVerify, setFileToVerify] = useState<File | null>(null);
-  const [manifestData, setManifestData] = useState<Record<string, unknown> | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [result, setResult] = useState<boolean | null>(null);
+// ── Types ────────────────────────────────────────────────────────────────────
 
-  const handleManifestUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+interface FileHashEntry {
+  sha256: string;
+  name?: string;
+  size?: number;
+}
+
+interface ManifestData {
+  protocol?: string;
+  packageHash?: string;
+  fileHashes?: FileHashEntry[];
+  createdAtLocal?: string;
+  eventType?: string;
+  evidenceType?: string;
+  [key: string]: unknown;
+}
+
+type MatchResult =
+  | { kind: "match"; against: string; label: string }
+  | { kind: "no-match"; computed: string; expected: string; label: string }
+  | { kind: "manifest-valid"; packageHash: string }
+  | { kind: "manifest-tampered"; packageHash: string; computed: string }
+  | { kind: "error"; message: string };
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function truncate(s: string, n = 16) {
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+async function hashFile(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  return sha256(buffer);
+}
+
+/**
+ * Re-computes the packageHash the same way create.tsx does:
+ * sha256(JSON.stringify(manifestWithoutPackageHash, null, 2))
+ */
+async function recomputePackageHash(manifest: ManifestData): Promise<string> {
+  const { packageHash: _removed, ...rest } = manifest;
+  void _removed;
+  return sha256(JSON.stringify(rest, null, 2));
+}
+
+function parseManifest(text: string): ManifestData | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return parsed as ManifestData;
+  } catch {
+    return null;
+  }
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function ResultPanel({ result }: { result: MatchResult }) {
+  const isPositive =
+    result.kind === "match" || result.kind === "manifest-valid";
+
+  return (
+    <div
+      className={`rounded-lg border p-5 space-y-3 ${
+        isPositive
+          ? "bg-primary/5 border-primary/20"
+          : "bg-destructive/5 border-destructive/20"
+      }`}
+      data-testid={isPositive ? "result-match" : "result-no-match"}
+    >
+      <div
+        className={`flex items-center gap-3 ${
+          isPositive ? "text-primary" : "text-destructive"
+        }`}
+      >
+        {isPositive ? (
+          <CheckCircle2 className="w-8 h-8 flex-shrink-0" />
+        ) : (
+          <XCircle className="w-8 h-8 flex-shrink-0" />
+        )}
+        <h4 className="text-base sm:text-lg font-semibold">
+          {result.kind === "match" && "Exact cryptographic match"}
+          {result.kind === "no-match" && "No match"}
+          {result.kind === "manifest-valid" && "Manifest integrity confirmed"}
+          {result.kind === "manifest-tampered" && "Manifest has been altered"}
+          {result.kind === "error" && "Verification error"}
+        </h4>
+      </div>
+
+      {result.kind === "match" && (
+        <div className="text-sm space-y-1 text-muted-foreground">
+          <p>The file matches the recorded fingerprint.</p>
+          <p>
+            Verified against:{" "}
+            <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+              {result.label}
+            </span>
+          </p>
+        </div>
+      )}
+
+      {result.kind === "no-match" && (
+        <div className="text-sm space-y-2 text-muted-foreground">
+          <p>
+            The file does not match. It may have been modified, compressed, or is a different file.
+          </p>
+          <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs bg-muted rounded p-3 break-all">
+            <span className="text-muted-foreground whitespace-nowrap">Computed:</span>
+            <span>{result.computed}</span>
+            <span className="text-muted-foreground whitespace-nowrap">Expected:</span>
+            <span>{result.expected}</span>
+          </div>
+        </div>
+      )}
+
+      {result.kind === "manifest-valid" && (
+        <div className="text-sm space-y-1 text-muted-foreground">
+          <p>The manifest file has not been modified since it was created.</p>
+          <p className="font-mono text-xs bg-muted px-2 py-1 rounded break-all">
+            {result.packageHash}
+          </p>
+        </div>
+      )}
+
+      {result.kind === "manifest-tampered" && (
+        <div className="text-sm space-y-2 text-muted-foreground">
+          <p>
+            The manifest content does not match its recorded package hash. The file may have been edited.
+          </p>
+          <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs bg-muted rounded p-3 break-all">
+            <span className="text-muted-foreground whitespace-nowrap">Recorded:</span>
+            <span>{result.packageHash}</span>
+            <span className="text-muted-foreground whitespace-nowrap">Computed:</span>
+            <span>{result.computed}</span>
+          </div>
+        </div>
+      )}
+
+      {result.kind === "error" && (
+        <p className="text-sm text-muted-foreground">{result.message}</p>
+      )}
+
+      {/* Always-visible wording note */}
+      <div className="flex items-start gap-2 border-t border-current/10 pt-3 text-xs text-muted-foreground">
+        <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+        <span>
+          A cryptographic match confirms the file is byte-for-byte identical to what was
+          fingerprinted. It does not prove when the event happened or that the content is truthful.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ComputedHashDisplay({ hash, label }: { hash: string; label: string }) {
+  return (
+    <div className="bg-muted/60 border border-border rounded p-3 space-y-1">
+      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+      <code className="block text-xs font-mono break-all text-foreground">{hash}</code>
+    </div>
+  );
+}
+
+// ── Mode 1: File vs. Manifest ─────────────────────────────────────────────────
+
+function FileVsManifestMode() {
+  const [manifest, setManifest] = useState<ManifestData | null>(null);
+  const [manifestError, setManifestError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [fileHash, setFileHash] = useState<string | null>(null);
+  const [isHashing, setIsHashing] = useState(false);
+  const [result, setResult] = useState<MatchResult | null>(null);
+
+  const handleManifest = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setManifest(null);
+    setManifestError(null);
+    setResult(null);
+    const f = e.target.files?.[0];
+    if (!f) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        setManifestData(json);
-        if (json.packageHash) {
-          setExpectedHash(String(json.packageHash));
-        } else if (Array.isArray(json.fileHashes) && json.fileHashes.length > 0) {
-          setExpectedHash(String(json.fileHashes[0].sha256));
-        }
-      } catch {
-        // ignore parse error
+    reader.onload = (ev) => {
+      const parsed = parseManifest(ev.target?.result as string);
+      if (!parsed) {
+        setManifestError("File is not valid JSON or could not be parsed.");
+        return;
       }
+      if (!Array.isArray(parsed.fileHashes) || parsed.fileHashes.length === 0) {
+        setManifestError(
+          "Manifest does not contain any file fingerprints (fileHashes). " +
+          "This manifest may be for a written testimony or a different record type."
+        );
+        return;
+      }
+      setManifest(parsed);
     };
-    reader.readAsText(file);
+    reader.readAsText(f);
   };
 
-  const verifyFile = async () => {
-    if (!fileToVerify || !expectedHash) return;
-    setIsVerifying(true);
-    setResult(null);
-    try {
-      const buffer = await fileToVerify.arrayBuffer();
-      const hash = await sha256(buffer);
-      let matched = false;
-      if (manifestData && Array.isArray(manifestData.fileHashes)) {
-        matched = (manifestData.fileHashes as Array<{ sha256: string }>).some(
-          (fh) => fh.sha256 === hash
-        );
-      } else {
-        matched = hash === expectedHash.trim().toLowerCase();
+  const handleFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      setResult(null);
+      setFileHash(null);
+      const f = e.target.files?.[0] ?? null;
+      setFile(f);
+      if (!f) return;
+      setIsHashing(true);
+      try {
+        const h = await hashFile(f);
+        setFileHash(h);
+      } finally {
+        setIsHashing(false);
       }
-      setResult(matched);
-    } catch {
-      setResult(false);
-    } finally {
-      setIsVerifying(false);
+    },
+    []
+  );
+
+  const compare = () => {
+    if (!manifest || !file || !fileHash) return;
+    const entries = manifest.fileHashes as FileHashEntry[];
+    const match = entries.find((e) => e.sha256 === fileHash);
+    if (match) {
+      setResult({
+        kind: "match",
+        against: match.sha256,
+        label: match.name ? `file: ${match.name}` : "fingerprint in manifest",
+      });
+    } else {
+      setResult({
+        kind: "no-match",
+        computed: fileHash,
+        expected:
+          entries.length === 1
+            ? entries[0].sha256
+            : `(${entries.length} fingerprints in manifest — none matched)`,
+        label: "manifest fileHashes",
+      });
     }
   };
 
+  const ready = !!manifest && !!fileHash && !isHashing;
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Upload the manifest JSON you saved when creating the witness record, then
+        select the original file. The file is hashed locally — it is never uploaded.
+      </p>
+
+      {/* Manifest upload */}
+      <div className="space-y-2">
+        <Label htmlFor="manifest-file">Manifest JSON file</Label>
+        <Input
+          id="manifest-file"
+          type="file"
+          accept=".json,application/json"
+          onChange={handleManifest}
+          data-testid="input-manifest-upload"
+        />
+        {manifestError && (
+          <div className="flex items-start gap-2 text-xs text-destructive">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {manifestError}
+          </div>
+        )}
+        {manifest && (
+          <div className="bg-muted/60 border border-border rounded p-3 text-xs space-y-1.5">
+            {manifest.protocol && (
+              <p>
+                <span className="text-muted-foreground">Protocol:</span>{" "}
+                <span className="font-mono">{String(manifest.protocol)}</span>
+              </p>
+            )}
+            {manifest.eventType && (
+              <p>
+                <span className="text-muted-foreground">Event type:</span>{" "}
+                <span className="capitalize">{String(manifest.eventType)}</span>
+              </p>
+            )}
+            <p>
+              <span className="text-muted-foreground">File fingerprints found:</span>{" "}
+              <strong>{(manifest.fileHashes as FileHashEntry[]).length}</strong>
+            </p>
+            <ul className="space-y-1 mt-1">
+              {(manifest.fileHashes as FileHashEntry[]).map((fh, i) => (
+                <li
+                  key={i}
+                  className="font-mono text-xs bg-background border border-border rounded px-2 py-1 break-all"
+                >
+                  {fh.name && (
+                    <span className="text-muted-foreground mr-2">{fh.name}:</span>
+                  )}
+                  {fh.sha256}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* File selection */}
+      <div className="space-y-2">
+        <Label htmlFor="evidence-file">Evidence file to verify</Label>
+        <p className="text-xs text-muted-foreground">
+          Select the original file from your device. It is hashed locally and not uploaded.
+        </p>
+        <Input
+          id="evidence-file"
+          type="file"
+          onChange={handleFile}
+          data-testid="input-file-verify"
+        />
+        {isHashing && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Computing fingerprint…
+          </div>
+        )}
+        {fileHash && !isHashing && (
+          <ComputedHashDisplay
+            hash={fileHash}
+            label={`Computed fingerprint of "${file?.name ?? "selected file"}"`}
+          />
+        )}
+      </div>
+
+      {/* Compare */}
+      <div className="pt-2 border-t border-border">
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={compare}
+          disabled={!ready}
+          data-testid="button-compare"
+        >
+          Compare
+        </Button>
+      </div>
+
+      {result && <ResultPanel result={result} />}
+    </div>
+  );
+}
+
+// ── Mode 2: File vs. Hash ────────────────────────────────────────────────────
+
+function FileVsHashMode() {
+  const [expectedHash, setExpectedHash] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileHash, setFileHash] = useState<string | null>(null);
+  const [isHashing, setIsHashing] = useState(false);
+  const [result, setResult] = useState<MatchResult | null>(null);
+
+  const handleFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      setResult(null);
+      setFileHash(null);
+      const f = e.target.files?.[0] ?? null;
+      setFile(f);
+      if (!f) return;
+      setIsHashing(true);
+      try {
+        const h = await hashFile(f);
+        setFileHash(h);
+      } finally {
+        setIsHashing(false);
+      }
+    },
+    []
+  );
+
+  const compare = () => {
+    if (!fileHash || !expectedHash.trim()) return;
+    const norm = expectedHash.trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(norm)) {
+      setResult({
+        kind: "error",
+        message:
+          "The pasted hash does not look like a valid SHA-256 fingerprint (expected 64 hex characters).",
+      });
+      return;
+    }
+    if (fileHash === norm) {
+      setResult({ kind: "match", against: norm, label: "pasted hash" });
+    } else {
+      setResult({ kind: "no-match", computed: fileHash, expected: norm, label: "pasted hash" });
+    }
+  };
+
+  const ready = !!fileHash && !!expectedHash.trim() && !isHashing;
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Paste a SHA-256 fingerprint from the public registry or a manifest, then select
+        the file you want to check. The file is hashed locally — it is never uploaded.
+      </p>
+
+      {/* Hash input */}
+      <div className="space-y-2">
+        <Label htmlFor="hash-input">SHA-256 fingerprint</Label>
+        <Input
+          id="hash-input"
+          placeholder="64-character hex string — e.g. a1b2c3d4…"
+          value={expectedHash}
+          onChange={(e) => { setExpectedHash(e.target.value); setResult(null); }}
+          className="font-mono text-xs sm:text-sm"
+          data-testid="input-expected-hash"
+          spellCheck={false}
+        />
+        {expectedHash.trim().length > 0 && !/^[a-f0-9]{64}$/i.test(expectedHash.trim()) && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            A SHA-256 hash must be exactly 64 lowercase hex characters.
+          </p>
+        )}
+      </div>
+
+      {/* File selection */}
+      <div className="space-y-2">
+        <Label htmlFor="evidence-file-hash">Evidence file to verify</Label>
+        <p className="text-xs text-muted-foreground">
+          Select the file from your device. It is hashed locally and not uploaded.
+        </p>
+        <Input
+          id="evidence-file-hash"
+          type="file"
+          onChange={handleFile}
+          data-testid="input-file-verify"
+        />
+        {isHashing && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Computing fingerprint…
+          </div>
+        )}
+        {fileHash && !isHashing && (
+          <ComputedHashDisplay
+            hash={fileHash}
+            label={`Computed fingerprint of "${file?.name ?? "selected file"}"`}
+          />
+        )}
+      </div>
+
+      {/* Compare */}
+      <div className="pt-2 border-t border-border">
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={compare}
+          disabled={!ready}
+          data-testid="button-compare"
+        >
+          Compare
+        </Button>
+      </div>
+
+      {result && <ResultPanel result={result} />}
+    </div>
+  );
+}
+
+// ── Mode 3: Manifest integrity ────────────────────────────────────────────────
+
+function ManifestIntegrityMode() {
+  const [manifest, setManifest] = useState<ManifestData | null>(null);
+  const [manifestError, setManifestError] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
+  const [result, setResult] = useState<MatchResult | null>(null);
+
+  const handleManifest = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setManifest(null);
+    setManifestError(null);
+    setResult(null);
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseManifest(ev.target?.result as string);
+      if (!parsed) {
+        setManifestError("File is not valid JSON or could not be parsed.");
+        return;
+      }
+      if (!parsed.packageHash) {
+        setManifestError(
+          "Manifest does not contain a packageHash field. Cannot verify integrity."
+        );
+        return;
+      }
+      setManifest(parsed);
+    };
+    reader.readAsText(f);
+  };
+
+  const check = async () => {
+    if (!manifest?.packageHash) return;
+    setIsChecking(true);
+    try {
+      const computed = await recomputePackageHash(manifest);
+      const recorded = String(manifest.packageHash).toLowerCase();
+      if (computed === recorded) {
+        setResult({ kind: "manifest-valid", packageHash: recorded });
+      } else {
+        setResult({ kind: "manifest-tampered", packageHash: recorded, computed });
+      }
+    } catch {
+      setResult({ kind: "error", message: "Failed to compute hash of manifest." });
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Check whether a manifest JSON file has been modified since it was originally
+        created. The manifest is re-hashed and compared against its recorded package hash.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="manifest-integrity">Manifest JSON file</Label>
+        <Input
+          id="manifest-integrity"
+          type="file"
+          accept=".json,application/json"
+          onChange={handleManifest}
+          data-testid="input-manifest-upload"
+        />
+        {manifestError && (
+          <div className="flex items-start gap-2 text-xs text-destructive">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {manifestError}
+          </div>
+        )}
+        {manifest && (
+          <div className="bg-muted/60 border border-border rounded p-3 text-xs space-y-1.5">
+            {manifest.protocol && (
+              <p>
+                <span className="text-muted-foreground">Protocol:</span>{" "}
+                <span className="font-mono">{String(manifest.protocol)}</span>
+              </p>
+            )}
+            <p>
+              <span className="text-muted-foreground">Recorded package hash:</span>
+            </p>
+            <code className="block font-mono break-all bg-background border border-border rounded px-2 py-1">
+              {String(manifest.packageHash)}
+            </code>
+          </div>
+        )}
+      </div>
+
+      <div className="pt-2 border-t border-border">
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={check}
+          disabled={!manifest || isChecking}
+          data-testid="button-compare"
+        >
+          {isChecking ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Checking…
+            </span>
+          ) : (
+            "Check Manifest Integrity"
+          )}
+        </Button>
+      </div>
+
+      {result && <ResultPanel result={result} />}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function Verify() {
   return (
     <Layout>
       <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
@@ -65,150 +604,46 @@ export default function Verify() {
             Verify Evidence
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground">
-            Check if a local file matches a published fingerprint exactly.
+            Confirm a file matches its recorded fingerprint — locally, without uploading.
           </p>
         </div>
 
-        <div className="bg-card border border-border p-4 sm:p-6 lg:p-8 rounded-lg shadow-sm space-y-6 sm:space-y-8">
-          {/* Step 1 */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-base sm:text-lg">
-              Step 1: Provide the Expected Fingerprint
-            </h3>
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="hash-input">Paste a SHA-256 Hash</Label>
-                <Input
-                  id="hash-input"
-                  placeholder="e.g. a1b2c3d4..."
-                  value={expectedHash}
-                  onChange={(e) => setExpectedHash(e.target.value)}
-                  className="font-mono text-xs sm:text-sm"
-                  data-testid="input-expected-hash"
-                />
-              </div>
+        <div className="bg-card border border-border rounded-lg shadow-sm p-4 sm:p-6 lg:p-8">
+          <Tabs defaultValue="file-vs-manifest">
+            <TabsList className="w-full mb-6 h-auto flex flex-col sm:flex-row gap-1 sm:gap-0">
+              <TabsTrigger
+                value="file-vs-manifest"
+                className="flex-1 flex items-center gap-1.5 text-xs sm:text-sm"
+              >
+                <FileJson className="w-4 h-4 flex-shrink-0" />
+                File vs. Manifest
+              </TabsTrigger>
+              <TabsTrigger
+                value="file-vs-hash"
+                className="flex-1 flex items-center gap-1.5 text-xs sm:text-sm"
+              >
+                <Hash className="w-4 h-4 flex-shrink-0" />
+                File vs. Hash
+              </TabsTrigger>
+              <TabsTrigger
+                value="manifest-integrity"
+                className="flex-1 flex items-center gap-1.5 text-xs sm:text-sm"
+              >
+                <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+                Manifest Integrity
+              </TabsTrigger>
+            </TabsList>
 
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">Or</span>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="manifest-upload">Upload Manifest JSON</Label>
-                <Input
-                  id="manifest-upload"
-                  type="file"
-                  accept=".json"
-                  onChange={handleManifestUpload}
-                  data-testid="input-manifest-upload"
-                />
-              </div>
-            </div>
-
-            {manifestData && (
-              <div className="mt-4 p-3 sm:p-4 bg-muted text-xs sm:text-sm border border-border rounded space-y-1.5">
-                <p>
-                  <strong>Protocol Version:</strong>{" "}
-                  {String(manifestData.protocol ?? "—")}
-                </p>
-                <p className="break-all">
-                  <strong>Package Hash:</strong>{" "}
-                  <span className="font-mono text-xs">
-                    {String(manifestData.packageHash ?? "—")}
-                  </span>
-                </p>
-                {Array.isArray(manifestData.fileHashes) &&
-                  manifestData.fileHashes.length > 0 && (
-                    <div>
-                      <p className="font-medium mb-1">Expected File Hashes:</p>
-                      <ul className="space-y-1 font-mono text-xs break-all">
-                        {(
-                          manifestData.fileHashes as Array<{ sha256: string }>
-                        ).map((fh, i) => (
-                          <li
-                            key={i}
-                            className="bg-background p-1.5 rounded border border-border"
-                          >
-                            {fh.sha256}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-              </div>
-            )}
-          </div>
-
-          {/* Step 2 */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-base sm:text-lg">
-              Step 2: Select Local File
-            </h3>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Select the file from your device. It will be hashed locally and not uploaded.
-            </p>
-            <Input
-              type="file"
-              onChange={(e) => setFileToVerify(e.target.files?.[0] || null)}
-              data-testid="input-file-verify"
-            />
-          </div>
-
-          {/* Compare button */}
-          <div className="pt-4 border-t border-border">
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={verifyFile}
-              disabled={!fileToVerify || !expectedHash || isVerifying}
-              data-testid="button-compare"
-            >
-              {isVerifying ? "Computing Hash..." : "Compare"}
-            </Button>
-          </div>
-
-          {/* Result */}
-          {result !== null && (
-            <div
-              className={`p-5 sm:p-6 rounded-lg border flex flex-col items-center justify-center text-center gap-3 ${
-                result
-                  ? "bg-primary/5 border-primary/20 text-primary"
-                  : "bg-destructive/5 border-destructive/20 text-destructive"
-              }`}
-              data-testid={result ? "result-match" : "result-no-match"}
-            >
-              {result ? (
-                <>
-                  <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12" />
-                  <div>
-                    <h4 className="text-lg sm:text-xl font-semibold mb-1">
-                      Exact cryptographic match
-                    </h4>
-                    <p className="text-xs sm:text-sm opacity-80">
-                      The file you selected matches the expected fingerprint.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <XCircle className="w-10 h-10 sm:w-12 sm:h-12" />
-                  <div>
-                    <h4 className="text-lg sm:text-xl font-semibold mb-1">
-                      No match
-                    </h4>
-                    <p className="text-xs sm:text-sm opacity-80">
-                      The file does not match the expected fingerprint. It may
-                      have been altered or is a different file.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+            <TabsContent value="file-vs-manifest">
+              <FileVsManifestMode />
+            </TabsContent>
+            <TabsContent value="file-vs-hash">
+              <FileVsHashMode />
+            </TabsContent>
+            <TabsContent value="manifest-integrity">
+              <ManifestIntegrityMode />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </Layout>
