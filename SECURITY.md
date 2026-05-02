@@ -44,7 +44,7 @@ These are known limitations of the current MVP. They are documented here for tra
 
 2. **No persistent session tracking.** Retraction token brute-force protection is in-memory and resets on server restart.
 
-3. **`createdAtLocal` is not trusted.** It comes from the user's device clock and is displayed with a warning. The authoritative timestamp is `serverReceivedAtUtc`.
+3. **`createdAtLocal` is not trusted.** It comes from the user's device clock and is displayed with a warning. The server-recorded registry timestamp is `serverReceivedAtUtc`. It proves only that the registry received the fingerprint by that server time.
 
 4. **Server compromise.** If the database or server is fully compromised, record metadata could be exposed. Original files are never stored, so original evidence cannot be leaked from the server.
 

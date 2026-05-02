@@ -64,7 +64,7 @@ In conflict zones and high-risk environments, uploading evidence directly to a p
 |---|---|
 | Original files | Never sent to server |
 | Raw filenames | Only SHA-256 of filename is stored |
-| Exact GPS coordinates | Only a presence flag ("yes/no") if clearly detected |
+| Exact GPS coordinates | Stored only as `"yes"` if clearly detected; otherwise omitted entirely |
 | Street addresses | Rejected by server-side validation |
 | Names, phone numbers | Rejected by server-side validation |
 | IP addresses | Only a truncated salted hash for rate limiting, never linked to records |
@@ -80,7 +80,7 @@ In conflict zones and high-risk environments, uploading evidence directly to a p
 | Country / region / city | Broad location, user-provided |
 | Safe descriptor | Size bucket, duration bucket, resolution bucket |
 | `createdAtLocal` | Browser clock — unverified, displayed with warning |
-| `serverReceivedAtUtc` | Server clock — authoritative timestamp |
+| `serverReceivedAtUtc` | Server-recorded registry timestamp. Proves only that the registry received the fingerprint by this server time. |
 | `retractionTokenHash` | SHA-256 of the retraction token |
 
 ---

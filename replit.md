@@ -119,7 +119,7 @@ When a user creates a proof package:
 - Country / region / city (broad location, user-provided)
 - Safe descriptor metadata (file size bucket, duration bucket, GPS presence flag — not coordinates)
 - `createdAtLocal` (browser clock, unverified, displayed with warning)
-- `serverReceivedAtUtc` (server clock, authoritative)
+- `serverReceivedAtUtc` (server-recorded registry timestamp — proves the registry received the fingerprint by this server time)
 - Quality level (A/B/C)
 - Publication status
 - Retraction token hash (not the raw token)
@@ -131,8 +131,8 @@ Only fields that can be extracted with confidence are stored. Uncertain fields a
 Allowed:
 - `mediaType`, `fileSizeBucket`, `durationBucket`, `resolutionBucket`, `aspectRatioBucket`
 - `textWordCount`, `language` (rough: Arabic/English/mixed/unknown)
-- `gpsMetadataDetected`: "yes" only if GPS tags clearly detected
-- `exifMetadataDetected`: "yes" only if EXIF metadata clearly detected
+- `gpsMetadataDetected`: stored only as `"yes"` if GPS tags clearly detected; otherwise omitted entirely
+- `exifMetadataDetected`: stored only as `"yes"` if EXIF metadata clearly detected; otherwise omitted entirely
 
 Never stored:
 - Codec, frame rate, exact capture time, exact GPS, device model, manufacturer, serial number

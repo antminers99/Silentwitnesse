@@ -71,7 +71,7 @@ The `packageHash` is the SHA-256 of the canonical manifest JSON string, computed
 | Field | Source | Trust level |
 |---|---|---|
 | `createdAtLocal` | User's browser clock | **Not independently verified.** Comes from the device. Displayed with a warning to viewers. |
-| `serverReceivedAtUtc` | Server clock at the time of POST | **Authoritative.** The registry received the fingerprint by this time. Cannot be set or overridden by the client. |
+| `serverReceivedAtUtc` | Server clock at the time of POST | **Server-recorded registry timestamp.** Proves only that the registry received the fingerprint by this server time. Cannot be set or overridden by the client. |
 
 ---
 
@@ -87,8 +87,8 @@ Only metadata fields that can be extracted with confidence are stored. Uncertain
 | `resolutionBucket` | `low` / `medium` / `high` by megapixel count | Only if reliably detected |
 | `textWordCount` | Word count (testimony) | Yes |
 | `language` | `Arabic` / `English` / `unknown` | Yes |
-| `gpsMetadataDetected` | `"yes"` only if GPS tags clearly present | Only if confirmed |
-| `exifMetadataDetected` | `"yes"` only if EXIF fields clearly present | Only if confirmed |
+| `gpsMetadataDetected` | Stored only as `"yes"` if GPS tags clearly detected; otherwise omitted entirely | Only if confirmed |
+| `exifMetadataDetected` | Stored only as `"yes"` if EXIF fields clearly detected; otherwise omitted entirely | Only if confirmed |
 
 Fields that are NOT stored: exact GPS coordinates, device model, manufacturer, serial number, codec, frame rate, exact capture time, or any field that could identify the device or its user.
 
