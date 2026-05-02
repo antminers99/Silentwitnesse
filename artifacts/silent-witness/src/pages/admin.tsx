@@ -34,7 +34,7 @@ interface AdminRecord {
   country: string | null;
   region: string | null;
   city: string | null;
-  safeDescriptor: unknown;
+  safeDescriptor: Record<string, string | number | boolean | null> | null;
   qualityLevel: string;
   publicationStatus: string;
   reviewStatus: string;
@@ -245,7 +245,7 @@ function RecordCard({
       {record.safeDescriptor && Object.keys(record.safeDescriptor as object).length > 0 && (
         <div className="text-xs bg-muted/50 border border-border rounded px-3 py-2 space-y-0.5">
           <p className="font-medium text-foreground mb-1">Safe descriptor</p>
-          {Object.entries(record.safeDescriptor as Record<string, unknown>)
+          {Object.entries(record.safeDescriptor as Record<string, string | number | boolean | null>)
             .filter(([, v]) => v != null)
             .map(([k, v]) => (
               <div key={k} className="flex gap-2">
