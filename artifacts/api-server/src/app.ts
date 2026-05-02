@@ -39,6 +39,8 @@ app.use(
   }),
 );
 
+const isDev = process.env["NODE_ENV"] !== "production";
+
 const allowedOrigins = (() => {
   const envOrigin = process.env["PUBLIC_APP_ORIGIN"];
   const origins: string[] = ["http://localhost", "http://localhost:3000", "http://localhost:5173"];
@@ -51,13 +53,15 @@ const allowedOrigins = (() => {
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow same-origin / non-browser requests (no Origin header) and dev tools
+      // Allow same-origin / non-browser requests (no Origin header)
       if (!origin) return callback(null, true);
-      if (
-        allowedOrigins.some((o) => origin === o || origin.startsWith("http://localhost")) ||
-        origin.endsWith(".replit.dev") ||
-        origin.endsWith(".replit.app")
-      ) {
+      // Localhost is always allowed in development
+      if (isDev && origin.startsWith("http://localhost")) return callback(null, true);
+      // Replit preview domains are only allowed outside of production
+      if (isDev && (origin.endsWith(".replit.dev") || origin.endsWith(".replit.app"))) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.some((o) => origin === o)) {
         return callback(null, true);
       }
       return callback(new Error("CORS: origin not allowed"), false);

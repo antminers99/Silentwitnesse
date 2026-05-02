@@ -184,7 +184,7 @@ lib/
 
 - `DATABASE_URL` — PostgreSQL connection string (runtime-managed)
 - `SESSION_SECRET` — session signing secret
-- `ADMIN_REVIEW_PASSWORD` — retained as a secret but no longer used (admin dashboard removed)
+
 
 ## Safety & Spam Controls
 

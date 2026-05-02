@@ -9,7 +9,7 @@ Thank you for your interest in contributing. Silent Witness is used by people in
 Before proposing any change, verify it does not:
 
 - Add any endpoint that accepts or stores original evidence files
-- Expose `pending_review`, `rejected_for_public_registry`, or `retracted_by_holder` records publicly
+- Expose `rejected_by_policy`, `retracted_by_holder`, or any non-public record publicly
 - Store exact GPS coordinates, street addresses, full names, phone numbers, or vehicle plates
 - Weaken or remove safety warnings shown to users
 - Add claims that records prove events, identity, or legal admissibility
@@ -32,7 +32,7 @@ pnpm install
 
 # Configure environment
 cp .env.example .env
-# Fill in DATABASE_URL and ADMIN_REVIEW_PASSWORD
+# Fill in DATABASE_URL and SESSION_SECRET
 
 # Push database schema
 pnpm --filter @workspace/db run push
