@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AlreadyRegisteredResponse,
   CreateRecordBody,
   ErrorResponse,
   HealthStatus,
@@ -112,6 +113,7 @@ export function useHealthCheck<
 }
 
 /**
+ * Returns only records with publication_status = public_timestamped_record or exact_match_published.
  * @summary List public witness records
  */
 export const getListRecordsUrl = (params?: ListRecordsParams) => {
@@ -206,6 +208,8 @@ export function useListRecords<
 }
 
 /**
+ * Submits a fingerprint for review. Records are set to pending_review and do not appear in the public registry until approved. The server sets serverReceivedAtUtc and publicationStatus — client values for these fields are ignored.
+
  * @summary Submit a public witness record
  */
 export const getCreateRecordUrl = () => {
@@ -225,7 +229,7 @@ export const createRecord = async (
 };
 
 export const getCreateRecordMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<ErrorResponse | AlreadyRegisteredResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -266,13 +270,15 @@ export type CreateRecordMutationResult = NonNullable<
   Awaited<ReturnType<typeof createRecord>>
 >;
 export type CreateRecordMutationBody = BodyType<CreateRecordBody>;
-export type CreateRecordMutationError = ErrorType<ErrorResponse>;
+export type CreateRecordMutationError = ErrorType<
+  ErrorResponse | AlreadyRegisteredResponse
+>;
 
 /**
  * @summary Submit a public witness record
  */
 export const useCreateRecord = <
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<ErrorResponse | AlreadyRegisteredResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -292,7 +298,8 @@ export const useCreateRecord = <
 };
 
 /**
- * @summary Get a public witness record by package hash
+ * Returns the record regardless of publication status (for verification and retraction).
+ * @summary Get a witness record by package hash
  */
 export const getGetRecordUrl = (packageHash: string) => {
   return `/api/records/${packageHash}`;
@@ -350,7 +357,7 @@ export type GetRecordQueryResult = NonNullable<
 export type GetRecordQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Get a public witness record by package hash
+ * @summary Get a witness record by package hash
  */
 
 export function useGetRecord<

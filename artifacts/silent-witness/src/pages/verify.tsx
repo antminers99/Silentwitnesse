@@ -242,10 +242,20 @@ function ResultPanel({ result }: { result: MatchResult }) {
       )}
 
       {result.kind === "no-match" && (
-        <div className="text-sm space-y-2 text-muted-foreground">
+        <div className="text-sm space-y-3 text-muted-foreground">
           <p>
-            The file does not match. It may have been modified, compressed, or is a different file.
+            This file does not exactly match the stored hash. It may be a different file, or it
+            may have been compressed or exported by another platform.
           </p>
+          <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <p className="text-amber-800 dark:text-amber-300">
+              <strong>Compression warning:</strong> Files sent through WhatsApp, Telegram,
+              Facebook, YouTube, or other platforms are often compressed or re-encoded, changing
+              their SHA-256. Exact verification requires the original file or an exact safe copy —
+              not a platform-downloaded version.
+            </p>
+          </div>
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs bg-muted rounded p-3 break-all">
             <span className="text-muted-foreground whitespace-nowrap">Computed:</span>
             <span>{result.computed}</span>

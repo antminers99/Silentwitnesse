@@ -32,9 +32,9 @@ import {
   ArrowRight,
   Download,
   Copy,
-  Share2,
   File,
   ExternalLink,
+  Key,
 } from "lucide-react";
 import {
   sha256,
@@ -109,6 +109,8 @@ export default function CreateRecord() {
   const [manifest, setManifest] = useState<Record<string, unknown> | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [alreadyRegisteredUrl, setAlreadyRegisteredUrl] = useState<string | null>(null);
+  const [retractionToken, setRetractionToken] = useState<string | null>(null);
+  const [retractionTokenHash, setRetractionTokenHash] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -251,6 +253,14 @@ export default function CreateRecord() {
       return;
     }
 
+    // Generate retraction token locally — raw token stays in downloaded proof package only
+    const token = crypto.randomUUID();
+    const tokenHash = await sha256("sw-retract:" + token);
+    setRetractionToken(token);
+    setRetractionTokenHash(tokenHash);
+
+    const originalHash = fileEntries.length === 1 ? fileEntries[0]!.sha256 : null;
+
     const baseManifest = {
       protocol: "silent-witness-v0.1",
       recordType:
@@ -267,6 +277,7 @@ export default function CreateRecord() {
         region: region || "withheld",
         city: city || "withheld",
       },
+      originalHash,
       safeDescriptor:
         fileEntries.length === 1
           ? fileEntries[0].safeDescriptor
@@ -276,12 +287,15 @@ export default function CreateRecord() {
       status: "timestamped_only_not_verified",
       publicWarning:
         "Original evidence is not shared. This record does not prove guilt or truth.",
+      retractionTokenHash: tokenHash,
       privateNote: publicNote || undefined,
     };
 
     const manifestString = JSON.stringify(baseManifest, null, 2);
     const packageHash = await sha256(manifestString);
-    setManifest({ ...baseManifest, packageHash });
+    // Add raw retractionToken to downloadable manifest AFTER computing packageHash
+    // (so it is not part of the canonical hash but is in the local proof package)
+    setManifest({ ...baseManifest, packageHash, retractionToken: token });
     setStep(3);
   };
 
@@ -304,18 +318,9 @@ export default function CreateRecord() {
     if (!manifest) return;
     const pub = { ...manifest };
     delete pub.privateNote;
+    delete pub.retractionToken; // never share raw retraction token publicly
     navigator.clipboard.writeText(JSON.stringify(pub, null, 2));
     toast({ title: "Copied", description: "Public record copied to clipboard." });
-  };
-
-  const shareToTelegram = () => {
-    if (!manifest) return;
-    const loc = manifest.location as { country: string };
-    const text = `Silent Witness Record\nEvent: ${manifest.eventType}\nLocation: ${loc.country}\nHash: ${manifest.packageHash}\nStatus: Timestamped only, not publicly verified.\nOriginal evidence is not shared.`;
-    window.open(
-      `https://t.me/share/url?url=${encodeURIComponent("https://silentwitness.org")}&text=${encodeURIComponent(text)}`,
-      "_blank"
-    );
   };
 
   const openSubmitDialog = () => {
@@ -335,6 +340,7 @@ export default function CreateRecord() {
       {
         data: {
           packageHash: hash,
+          originalHash: pub.originalHash ? String(pub.originalHash) : null,
           eventType: String(pub.eventType),
           evidenceType: String(pub.evidenceType),
           country: loc.country !== "withheld" ? loc.country : null,
@@ -345,11 +351,16 @@ export default function CreateRecord() {
           qualityLevel: recordType === "package" ? "A" : recordType === "file" ? "B" : "C",
           publicWarning: String(pub.publicWarning),
           createdAtLocal: String(pub.createdAtLocal),
+          retractionTokenHash: retractionTokenHash ?? null,
         },
       },
       {
         onSuccess: () =>
-          toast({ title: "Submitted", description: "Public fingerprint added to registry." }),
+          toast({
+            title: "Submitted for Review",
+            description:
+              "Fingerprint submitted. It will appear in the public registry after reviewer approval.",
+          }),
         onError: (err) => {
           const apiErr = err as ApiError<{ status?: string; error?: string }>;
           if (apiErr.status === 409 && apiErr.data?.status === "already_registered") {
@@ -693,7 +704,7 @@ export default function CreateRecord() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <Button
                 variant="outline"
                 className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1"
@@ -717,17 +728,6 @@ export default function CreateRecord() {
                 </span>
               </Button>
               <Button
-                variant="outline"
-                className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1"
-                onClick={shareToTelegram}
-                data-testid="button-share-telegram"
-              >
-                <Share2 className="w-4 h-4" />
-                <span className="text-xs leading-tight text-center">
-                  Share to Telegram
-                </span>
-              </Button>
-              <Button
                 className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={openSubmitDialog}
                 disabled={createRecord.isPending || !!alreadyRegisteredUrl}
@@ -739,6 +739,24 @@ export default function CreateRecord() {
                 </span>
               </Button>
             </div>
+
+            {retractionToken && (
+              <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-xs">
+                <Key className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="space-y-1 min-w-0">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">
+                    Retraction token — save this in your proof package
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-400">
+                    This token lets you request removal of the public record later.
+                    It is included in your downloaded proof package and is never sent to the server.
+                  </p>
+                  <code className="block font-mono text-xs bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800 rounded px-2 py-1 break-all text-amber-900 dark:text-amber-200 mt-1">
+                    {retractionToken}
+                  </code>
+                </div>
+              </div>
+            )}
 
             {alreadyRegisteredUrl && (
               <div className="flex items-start gap-3 bg-muted border border-border rounded-lg p-4 text-sm">
@@ -786,8 +804,9 @@ export default function CreateRecord() {
                   Do not include names, exact locations, or accusations in public notes.
                 </p>
                 <p>
-                  Once submitted, the fingerprint and metadata will be visible in the public
-                  registry. This action cannot be undone.
+                  Once submitted, the fingerprint enters a review queue. A reviewer will
+                  check it before it appears in the public registry. Your retraction token
+                  (in your proof package) lets you request removal later.
                 </p>
               </div>
             </DialogDescription>

@@ -32,6 +32,7 @@ paths:
       operationId: listRecords
       tags: [records]
       summary: List public witness records
+      description: Returns only records with publication_status = public_timestamped_record or exact_match_published.
       parameters:
         - name: country
           in: query
@@ -79,6 +80,10 @@ paths:
       operationId: createRecord
       tags: [records]
       summary: Submit a public witness record
+      description: >
+        Submits a fingerprint for review. Records are set to pending_review and do not
+        appear in the public registry until approved. The server sets serverReceivedAtUtc
+        and publicationStatus — client values for these fields are ignored.
       requestBody:
         required: true
         content:
@@ -87,7 +92,7 @@ paths:
               $ref: "#/components/schemas/CreateRecordBody"
       responses:
         "201":
-          description: Record created
+          description: Record created and pending review
           content:
             application/json:
               schema:
@@ -103,7 +108,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/AlreadyRegisteredResponse"
         "429":
           description: Rate limit exceeded
           content:
@@ -115,7 +120,8 @@ paths:
     get:
       operationId: getRecord
       tags: [records]
-      summary: Get a public witness record by package hash
+      summary: Get a witness record by package hash
+      description: Returns the record regardless of publication status (for verification and retraction).
       parameters:
         - name: packageHash
           in: path
@@ -167,33 +173,73 @@ components:
       required:
         - error
 
+    AlreadyRegisteredResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [already_registered]
+        error:
+          type: string
+        recordUrl:
+          type: string
+        serverReceivedAtUtc:
+          type: string
+      required:
+        - status
+        - error
+        - recordUrl
+        - serverReceivedAtUtc
+
     SafeDescriptor:
       type: object
+      description: >
+        Confirmed safe metadata about the evidence file. Only include fields that
+        can be extracted with confidence. Omit uncertain fields entirely.
       properties:
         mediaType:
           type: ["string", "null"]
-        durationBucket:
-          type: ["string", "null"]
-        resolutionBucket:
-          type: ["string", "null"]
         fileSizeBucket:
           type: ["string", "null"]
-        wordCount:
+        durationBucket:
+          type: ["string", "null"]
+          description: Only if confidently readable
+        resolutionBucket:
+          type: ["string", "null"]
+          description: Only if confidently readable
+        aspectRatioBucket:
+          type: ["string", "null"]
+          description: Only if confidently readable
+        textWordCount:
           type: ["integer", "null"]
         language:
           type: ["string", "null"]
-        gpsMetadata:
+          description: "rough: arabic / english / mixed / unknown"
+        gpsMetadataDetected:
           type: ["string", "null"]
-        exifMetadata:
+          description: "'yes' only if GPS tags clearly detected; 'no' or omit otherwise"
+        exifMetadataDetected:
           type: ["string", "null"]
+          description: "'yes' only if EXIF metadata clearly detected"
 
     WitnessRecord:
       type: object
+      description: >
+        A public witness record. Exact SHA-256 matching only works if the later file
+        is byte-for-byte identical. Files sent through messaging or social platforms
+        may be compressed or re-encoded, causing exact hashes not to match.
       properties:
         id:
           type: integer
         packageHash:
           type: string
+          description: SHA-256 of the canonical manifest JSON
+        originalHash:
+          type: ["string", "null"]
+          description: SHA-256 of the original selected file, if provided
+        safeCopyHash:
+          type: ["string", "null"]
+          description: SHA-256 of a safe export copy, if created
         eventType:
           type: string
         evidenceType:
@@ -206,10 +252,23 @@ components:
           type: ["string", "null"]
         safeDescriptor:
           $ref: "#/components/schemas/SafeDescriptor"
-        status:
-          type: string
         qualityLevel:
           type: string
+          enum: [A, B, C, D]
+        publicationStatus:
+          type: string
+          enum:
+            - pending_review
+            - public_timestamped_record
+            - rejected_for_public_registry
+            - retracted_by_holder
+            - exact_match_published
+          description: >
+            Approval workflow status. Only public_timestamped_record and
+            exact_match_published appear in the public registry.
+        status:
+          type: string
+          description: Record vocabulary status (timestamped_only_not_verified etc.)
         publicWarning:
           type: string
         createdAtLocal:
@@ -220,8 +279,11 @@ components:
         serverReceivedAtUtc:
           type: string
           description: >
-            Timestamp set exclusively by the server when the public record was
-            received. The client cannot set or override this value.
+            Timestamp set exclusively by the server when the public record was received.
+            The client cannot set or override this value.
+        approvedAtUtc:
+          type: ["string", "null"]
+          description: UTC time when a reviewer approved this record for the public registry.
         isDemo:
           type: boolean
       required:
@@ -229,8 +291,9 @@ components:
         - packageHash
         - eventType
         - evidenceType
-        - status
         - qualityLevel
+        - publicationStatus
+        - status
         - publicWarning
         - createdAtLocal
         - serverReceivedAtUtc
@@ -252,11 +315,16 @@ components:
     CreateRecordBody:
       type: object
       description: >
-        Fields accepted from the client. serverReceivedAtUtc is NOT accepted —
-        it is always set by the server on receipt.
+        Fields accepted from the client. serverReceivedAtUtc and publicationStatus
+        are NOT accepted — both are always set by the server.
+        Exact SHA-256 matching requires the byte-for-byte identical file.
       properties:
         packageHash:
           type: string
+          description: SHA-256 of the canonical manifest JSON
+        originalHash:
+          type: ["string", "null"]
+          description: SHA-256 of the original selected file (optional)
         eventType:
           type: string
         evidenceType:
@@ -278,8 +346,13 @@ components:
         createdAtLocal:
           type: string
           description: >
-            ISO-8601 timestamp from the user's device clock at fingerprint
-            creation time. Stored as-is; not treated as authoritative.
+            ISO-8601 timestamp from the user's device clock at fingerprint creation time.
+            Stored as-is; not treated as authoritative.
+        retractionTokenHash:
+          type: ["string", "null"]
+          description: >
+            SHA-256 of the holder's retraction token. Only the hash is stored —
+            the raw token stays in the holder's local proof package.
         honeypot:
           type: ["string", "null"]
       required:

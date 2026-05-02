@@ -5,7 +5,7 @@ import { useGetRecord, getGetRecordQueryKey } from "@workspace/api-client-react"
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Calendar, Clock, MapPin, AlertTriangle, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, MapPin, AlertTriangle, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 
 function formatLocalTime(iso: string): string {
@@ -36,6 +36,14 @@ function formatUtcTime(iso: string): string {
   }
 }
 
+const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  pending_review: { label: "Pending Review", variant: "outline" },
+  public_timestamped_record: { label: "Public Registry Record", variant: "default" },
+  rejected_for_public_registry: { label: "Rejected", variant: "destructive" },
+  retracted_by_holder: { label: "Retracted by Holder", variant: "secondary" },
+  exact_match_published: { label: "Exact Match Published", variant: "default" },
+};
+
 export default function RecordDetail() {
   const params = useParams<{ packageHash: string }>();
   const packageHash = params.packageHash ?? "";
@@ -46,6 +54,13 @@ export default function RecordDetail() {
       enabled: packageHash.length > 0,
     },
   });
+
+  const r = record as (typeof record & { publicationStatus?: string; approvedAtUtc?: string | null; originalHash?: string | null; safeCopyHash?: string | null }) | undefined;
+  const pubStatus = r?.publicationStatus;
+  const statusInfo = pubStatus ? (STATUS_LABELS[pubStatus] ?? { label: pubStatus, variant: "outline" as const }) : null;
+  const approvedAtUtc = r?.approvedAtUtc ?? null;
+  const originalHash = r?.originalHash ?? null;
+  const safeCopyHash = r?.safeCopyHash ?? null;
 
   return (
     <Layout>
@@ -84,10 +99,15 @@ export default function RecordDetail() {
                 <h1 className="text-xl sm:text-2xl font-serif text-primary tracking-tight capitalize">
                   {record.eventType.replace(/_/g, " ")}
                 </h1>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="font-mono text-xs">
                     Level {record.qualityLevel}
                   </Badge>
+                  {statusInfo && (
+                    <Badge variant={statusInfo.variant} className="text-xs">
+                      {statusInfo.label}
+                    </Badge>
+                  )}
                   {record.isDemo && (
                     <Badge variant="secondary" className="text-xs">
                       Demo record
@@ -106,6 +126,25 @@ export default function RecordDetail() {
               </p>
             </div>
 
+            {/* Publication status notice */}
+            {pubStatus === "pending_review" && (
+              <div className="flex items-start gap-3 bg-muted/50 border border-border rounded-lg p-4">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-500 mt-0.5" />
+                <p className="text-sm text-muted-foreground">
+                  This record is pending review. It is not yet visible in the public registry.
+                </p>
+              </div>
+            )}
+            {pubStatus === "retracted_by_holder" && (
+              <div className="flex items-start gap-3 bg-muted/50 border border-border rounded-lg p-4">
+                <XCircle className="w-4 h-4 flex-shrink-0 text-muted-foreground mt-0.5" />
+                <p className="text-sm text-muted-foreground">
+                  This record has been retracted by the holder. The fingerprint is preserved but
+                  no public metadata is displayed.
+                </p>
+              </div>
+            )}
+
             <Separator />
 
             {/* ── Timestamp section ─────────────────────────────────────── */}
@@ -121,14 +160,13 @@ export default function RecordDetail() {
                   Local creation time
                 </div>
                 <div className="font-mono text-base sm:text-lg text-foreground">
-                  {formatLocalTime(record.createdAtLocal)}
+                  {record.createdAtLocal ? formatLocalTime(record.createdAtLocal) : "—"}
                   <span className="text-xs text-muted-foreground ml-2 font-sans">local device time</span>
                 </div>
                 <div className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400 mt-1">
                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                   <span>
-                    This time comes from the user&apos;s device and is not independently
-                    verified.
+                    This time comes from the user&apos;s device and is not independently verified.
                   </span>
                 </div>
               </div>
@@ -147,10 +185,27 @@ export default function RecordDetail() {
                 </div>
               </div>
 
+              {/* Approved timestamp */}
+              {approvedAtUtc && (
+                <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-lg p-4 space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Approved for public registry
+                  </div>
+                  <div className="font-mono text-sm text-foreground">
+                    {formatUtcTime(approvedAtUtc)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    This record was approved by a reviewer and is visible in the public registry.
+                  </div>
+                </div>
+              )}
+
               {/* Combined explanation */}
               <div className="text-xs text-muted-foreground bg-muted/40 border border-border rounded p-3 leading-relaxed">
                 Local creation time is provided by the user&apos;s device. Registry timestamp
                 is recorded by the Silent Witness server when the fingerprint was submitted.
+                Neither timestamp proves when the original event occurred.
               </div>
             </div>
 
@@ -164,9 +219,9 @@ export default function RecordDetail() {
               <div className="flex items-start gap-3 bg-destructive/5 border border-destructive/20 rounded-lg p-4">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0 text-destructive mt-0.5" />
                 <p className="text-sm text-destructive/90 leading-relaxed font-medium">
-                  This record is a timestamped fingerprint only. It is not public proof that
-                  the event happened. Verification requires the original file or text to match
-                  the stored fingerprint.
+                  This record is a timestamped fingerprint only. It does not prove that an event
+                  happened, identify a perpetrator, or guarantee legal admissibility. Verification
+                  requires the original file or exact safe copy.
                 </p>
               </div>
               <div className="flex items-start gap-3 bg-muted/40 border border-border rounded-lg p-4">
@@ -189,33 +244,72 @@ export default function RecordDetail() {
 
             <Separator />
 
-            {/* ── Fingerprint ───────────────────────────────────────────── */}
-            <div className="space-y-2">
+            {/* ── Fingerprints ───────────────────────────────────────────── */}
+            <div className="space-y-4">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Package Fingerprint (SHA-256)
+                Fingerprints (SHA-256)
               </h2>
-              <code className="block bg-muted border border-border rounded px-3 py-2 text-xs font-mono break-all text-foreground">
-                {record.packageHash}
-              </code>
-              <p className="text-xs text-muted-foreground">
-                This hash uniquely identifies the witness record package. Original files
-                are never transmitted.
-              </p>
+
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  Package Hash
+                </p>
+                <code className="block bg-muted border border-border rounded px-3 py-2 text-xs font-mono break-all text-foreground">
+                  {record.packageHash}
+                </code>
+                <p className="text-xs text-muted-foreground">
+                  SHA-256 of the canonical manifest JSON. Uniquely identifies this witness record
+                  package. Original files are never transmitted.
+                </p>
+              </div>
+
+              {originalHash && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Original File Hash
+                  </p>
+                  <code className="block bg-muted border border-border rounded px-3 py-2 text-xs font-mono break-all text-foreground">
+                    {originalHash}
+                  </code>
+                  <div className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Exact match only if the later file is byte-for-byte identical. Files
+                      shared via messaging or social platforms may be compressed, changing
+                      this hash.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {safeCopyHash && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Safe Copy Hash
+                  </p>
+                  <code className="block bg-muted border border-border rounded px-3 py-2 text-xs font-mono break-all text-foreground">
+                    {safeCopyHash}
+                  </code>
+                </div>
+              )}
             </div>
 
             <Separator />
 
-            {/* ── Status ────────────────────────────────────────────────── */}
+            {/* ── Publication status ─────────────────────────────────────── */}
             <div className="space-y-2">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Verification status
+                Registry status
               </h2>
-              <Badge
-                variant="secondary"
-                className="bg-muted text-muted-foreground font-normal"
-              >
-                Not publicly verified
-              </Badge>
+              {statusInfo ? (
+                <Badge variant={statusInfo.variant}>
+                  {statusInfo.label}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-muted text-muted-foreground font-normal">
+                  Not publicly verified
+                </Badge>
+              )}
               <p className="text-xs text-muted-foreground">
                 Records are shown as &ldquo;Not publicly verified&rdquo; unless reviewed by a verified
                 partner organisation.

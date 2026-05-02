@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { db, witnessRecordsTable } from "@workspace/db";
 import {
@@ -12,8 +12,14 @@ const router: IRouter = Router();
 
 const PHONE_REGEX = /\d[\d\s\-.]{7,}/;
 const GPS_REGEX = /\d+\.\d+,\s*\d+\.\d+/;
-const VIOLENT_PHRASES = /\bgo\s+kill\b|\bkill\s+him\b|\bkill\s+her\b|\bkill\s+them\b/i;
-const MAX_PUBLIC_NOTE_LENGTH = 500;
+const VIOLENT_PHRASES =
+  /\bgo\s+kill\b|\bkill\s+him\b|\bkill\s+her\b|\bkill\s+them\b|\ball\s+of\s+them\b/i;
+const UNSAFE_PATTERNS =
+  /\b(go\s+kill|murder|assassinate|execute|all\s+guilty|they\s+deserve\s+to\s+die)\b/i;
+const MAX_PUBLIC_NOTE_LENGTH = 200;
+
+// Publication statuses that appear in the public registry
+const PUBLIC_STATUSES = ["public_timestamped_record", "exact_match_published"];
 
 const submissionCounts = new Map<string, { count: number; windowStart: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -43,13 +49,13 @@ function checkRateLimit(ip: string): boolean {
 function validatePublicNote(note: string | null | undefined): string | null {
   if (!note) return null;
   if (note.length > MAX_PUBLIC_NOTE_LENGTH)
-    return "Public note is too long (max 500 characters).";
+    return `Public note is too long (max ${MAX_PUBLIC_NOTE_LENGTH} characters).`;
   if (PHONE_REGEX.test(note))
     return "Public note appears to contain a phone number. Remove it before submitting publicly.";
   if (GPS_REGEX.test(note))
     return "Public note appears to contain GPS coordinates. Remove them before submitting publicly.";
-  if (VIOLENT_PHRASES.test(note))
-    return "Public note contains language that may incite violence. It cannot be submitted publicly.";
+  if (VIOLENT_PHRASES.test(note) || UNSAFE_PATTERNS.test(note))
+    return "Public note contains language that cannot be submitted publicly.";
   return null;
 }
 
@@ -61,52 +67,57 @@ function computeQualityLevel(body: {
   const hasDescriptor =
     body.safeDescriptor &&
     typeof body.safeDescriptor === "object" &&
-    Object.values(body.safeDescriptor as Record<string, unknown>).some(
-      (v) => v != null
-    );
+    Object.values(body.safeDescriptor as Record<string, unknown>).some((v) => v != null);
   if (body.evidenceType !== "withheld" && body.eventType !== "withheld" && hasDescriptor)
     return "A";
   if (body.evidenceType !== "withheld" && hasDescriptor) return "B";
   return "C";
 }
 
-/** Serialize a DB record to the API shape — always uses server-side timestamps. */
+/** Public serialiser — only fields safe for the public API. */
 function serializeRecord(r: typeof witnessRecordsTable.$inferSelect) {
   return {
     id: r.id,
     packageHash: r.packageHash,
+    originalHash: r.originalHash ?? null,
+    safeCopyHash: r.safeCopyHash ?? null,
     eventType: r.eventType,
     evidenceType: r.evidenceType,
     country: r.country,
     region: r.region,
     city: r.city,
     safeDescriptor: r.safeDescriptor,
-    status: r.status,
     qualityLevel: r.qualityLevel,
+    publicationStatus: r.publicationStatus,
+    status: r.status,
     publicWarning: r.publicWarning,
-    // Local time claimed by the user's device at fingerprint creation
-    createdAtLocal: r.createdAtLocal,
-    // Authoritative server receipt time — never comes from the client
+    createdAtLocal: r.createdAtLocal ?? "",
     serverReceivedAtUtc: r.serverReceivedAtUtc.toISOString(),
+    approvedAtUtc: r.approvedAtUtc?.toISOString() ?? null,
     isDemo: r.isDemo,
   };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // GET /records/stats — must be registered before /records/:packageHash
+// Only counts public records.
 // ──────────────────────────────────────────────────────────────────────────────
 router.get("/records/stats", async (req, res): Promise<void> => {
+  const publicFilter = inArray(witnessRecordsTable.publicationStatus, PUBLIC_STATUSES);
+
   const [totalResult, byEventType, byCountry, byQualityLevel, recentResult] =
     await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
-        .from(witnessRecordsTable),
+        .from(witnessRecordsTable)
+        .where(publicFilter),
       db
         .select({
           key: witnessRecordsTable.eventType,
           count: sql<number>`count(*)::int`,
         })
         .from(witnessRecordsTable)
+        .where(publicFilter)
         .groupBy(witnessRecordsTable.eventType)
         .orderBy(desc(sql`count(*)`)),
       db
@@ -115,7 +126,7 @@ router.get("/records/stats", async (req, res): Promise<void> => {
           count: sql<number>`count(*)::int`,
         })
         .from(witnessRecordsTable)
-        .where(sql`${witnessRecordsTable.country} is not null`)
+        .where(and(publicFilter, sql`${witnessRecordsTable.country} is not null`))
         .groupBy(witnessRecordsTable.country)
         .orderBy(desc(sql`count(*)`)),
       db
@@ -124,36 +135,31 @@ router.get("/records/stats", async (req, res): Promise<void> => {
           count: sql<number>`count(*)::int`,
         })
         .from(witnessRecordsTable)
+        .where(publicFilter)
         .groupBy(witnessRecordsTable.qualityLevel)
         .orderBy(witnessRecordsTable.qualityLevel),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(witnessRecordsTable)
         .where(
-          sql`${witnessRecordsTable.serverReceivedAtUtc} > now() - interval '24 hours'`
+          and(
+            publicFilter,
+            sql`${witnessRecordsTable.serverReceivedAtUtc} > now() - interval '24 hours'`
+          )
         ),
     ]);
 
   res.json({
     total: totalResult[0]?.count ?? 0,
-    byEventType: byEventType.map((r) => ({
-      key: r.key ?? "unknown",
-      count: r.count,
-    })),
-    byCountry: byCountry.map((r) => ({
-      key: r.key ?? "unknown",
-      count: r.count,
-    })),
-    byQualityLevel: byQualityLevel.map((r) => ({
-      key: r.key,
-      count: r.count,
-    })),
+    byEventType: byEventType.map((r) => ({ key: r.key ?? "unknown", count: r.count })),
+    byCountry: byCountry.map((r) => ({ key: r.key ?? "unknown", count: r.count })),
+    byQualityLevel: byQualityLevel.map((r) => ({ key: r.key, count: r.count })),
     recentCount: recentResult[0]?.count ?? 0,
   });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// GET /records
+// GET /records — public registry; only approved records.
 // ──────────────────────────────────────────────────────────────────────────────
 router.get("/records", async (req, res): Promise<void> => {
   const parsed = ListRecordsQueryParams.safeParse(req.query);
@@ -165,7 +171,7 @@ router.get("/records", async (req, res): Promise<void> => {
   const { country, region, city, eventType, evidenceType, qualityLevel, limit, offset } =
     parsed.data;
 
-  const conditions = [];
+  const conditions = [inArray(witnessRecordsTable.publicationStatus, PUBLIC_STATUSES)];
   if (country) conditions.push(eq(witnessRecordsTable.country, country));
   if (region) conditions.push(eq(witnessRecordsTable.region, region));
   if (city) conditions.push(eq(witnessRecordsTable.city, city));
@@ -174,7 +180,7 @@ router.get("/records", async (req, res): Promise<void> => {
   if (qualityLevel) conditions.push(eq(witnessRecordsTable.qualityLevel, qualityLevel));
   conditions.push(sql`${witnessRecordsTable.qualityLevel} != 'D'`);
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const whereClause = and(...conditions);
 
   const [records, countResult] = await Promise.all([
     db
@@ -198,8 +204,7 @@ router.get("/records", async (req, res): Promise<void> => {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // POST /records
-// The server sets serverReceivedAtUtc exclusively — any field named
-// serverReceivedAtUtc coming from the client is ignored by the Zod schema.
+// Sets publicationStatus = pending_review. Record is not public until approved.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post("/records", async (req, res): Promise<void> => {
   const ip =
@@ -226,19 +231,13 @@ router.post("/records", async (req, res): Promise<void> => {
     return;
   }
 
-  if (
-    !body.packageHash ||
-    body.packageHash.length !== 64 ||
-    !/^[a-f0-9]+$/i.test(body.packageHash)
-  ) {
-    res.status(400).json({
-      error: "Invalid package hash format. Expected SHA-256 hex string.",
-    });
+  if (!body.packageHash || body.packageHash.length !== 64 || !/^[a-f0-9]+$/i.test(body.packageHash)) {
+    res.status(400).json({ error: "Invalid package hash format. Expected SHA-256 hex string." });
     return;
   }
 
   const noteError = validatePublicNote(
-    (body as Record<string, unknown>).publicNote as string | null
+    (body as Record<string, unknown>)["publicNote"] as string | null
   );
   if (noteError) {
     res.status(400).json({ error: noteError });
@@ -267,41 +266,37 @@ router.post("/records", async (req, res): Promise<void> => {
   // Quality D records may be saved locally but are not accepted into the public registry
   if ((body.qualityLevel ?? "C") === "D") {
     res.status(400).json({
-      error:
-        "Low-quality records can be saved locally but are not accepted into the public registry.",
+      error: "Low-quality records can be saved locally but are not accepted into the public registry.",
     });
     return;
   }
 
   const qualityLevel = computeQualityLevel(body);
 
-  // serverReceivedAtUtc is set by defaultNow() in the schema —
-  // the value from body.createdAtLocal is stored as-is for display only.
   const [record] = await db
     .insert(witnessRecordsTable)
     .values({
       packageHash: body.packageHash,
+      originalHash: body.originalHash ?? null,
       eventType: body.eventType,
       evidenceType: body.evidenceType,
       country: body.country ?? null,
       region: body.region ?? null,
       city: body.city ?? null,
       safeDescriptor: (body.safeDescriptor as object) ?? null,
-      status: body.status,
+      status: body.status ?? "timestamped_only_not_verified",
       qualityLevel: body.qualityLevel ?? qualityLevel,
       publicWarning: body.publicWarning,
-      createdAtLocal: body.createdAtLocal,   // from client device clock, stored verbatim
-      // serverReceivedAtUtc — NOT set here, DB default (now()) handles it
+      createdAtLocal: body.createdAtLocal,
+      retractionTokenHash: body.retractionTokenHash ?? null,
+      // publicationStatus — always pending_review; NOT accepted from client
+      publicationStatus: "pending_review",
       isDemo: false,
       submitterIp: getIpHash(ip),
     })
     .returning();
 
-  req.log.info(
-    { packageHash: body.packageHash, qualityLevel },
-    "New witness record submitted"
-  );
-
+  req.log.info({ packageHash: body.packageHash, qualityLevel }, "New witness record submitted");
   res.status(201).json(serializeRecord(record));
 });
 
