@@ -10,6 +10,7 @@ import Safety from "@/pages/safety";
 import Verify from "@/pages/verify";
 import Registry from "@/pages/records";
 import CreateRecord from "@/pages/create";
+import RecordDetail from "@/pages/record-detail";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/protocol" component={Protocol} />
       <Route path="/safety" component={Safety} />
       <Route path="/records" component={Registry} />
+      <Route path="/records/:packageHash" component={RecordDetail} />
       <Route path="/verify" component={Verify} />
       <Route path="/create" component={CreateRecord} />
       <Route component={NotFound} />

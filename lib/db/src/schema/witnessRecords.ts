@@ -14,14 +14,21 @@ export const witnessRecordsTable = pgTable("witness_records", {
   status: text("status").notNull().default("timestamped_only_not_verified"),
   qualityLevel: text("quality_level").notNull().default("C"),
   publicWarning: text("public_warning").notNull(),
-  createdAtUtc: text("created_at_utc").notNull(),
+  // Provided by the user's browser at fingerprint creation time (not independently verified)
+  createdAtLocal: text("created_at_local").notNull(),
+  // Set exclusively by the server when it receives the POST — never from client input
+  serverReceivedAtUtc: timestamp("server_received_at_utc", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
   isDemo: boolean("is_demo").notNull().default(false),
   submitterIp: text("submitter_ip"),
+  // Internal created_at kept for ordering / internal use
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertWitnessRecordSchema = createInsertSchema(witnessRecordsTable).omit({
   id: true,
+  serverReceivedAtUtc: true, // always set by server
   createdAt: true,
   submitterIp: true,
 });

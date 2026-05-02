@@ -20,7 +20,11 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT_MAX = 10;
 
 function getIpHash(ip: string): string {
-  return crypto.createHash("sha256").update(ip + "silent-witness-salt").digest("hex").slice(0, 16);
+  return crypto
+    .createHash("sha256")
+    .update(ip + "silent-witness-salt")
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function checkRateLimit(ip: string): boolean {
@@ -31,27 +35,21 @@ function checkRateLimit(ip: string): boolean {
     submissionCounts.set(ipHash, { count: 1, windowStart: now });
     return true;
   }
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return false;
-  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
   entry.count++;
   return true;
 }
 
 function validatePublicNote(note: string | null | undefined): string | null {
   if (!note) return null;
-  if (note.length > MAX_PUBLIC_NOTE_LENGTH) {
+  if (note.length > MAX_PUBLIC_NOTE_LENGTH)
     return "Public note is too long (max 500 characters).";
-  }
-  if (PHONE_REGEX.test(note)) {
+  if (PHONE_REGEX.test(note))
     return "Public note appears to contain a phone number. Remove it before submitting publicly.";
-  }
-  if (GPS_REGEX.test(note)) {
+  if (GPS_REGEX.test(note))
     return "Public note appears to contain GPS coordinates. Remove them before submitting publicly.";
-  }
-  if (VIOLENT_PHRASES.test(note)) {
+  if (VIOLENT_PHRASES.test(note))
     return "Public note contains language that may incite violence. It cannot be submitted publicly.";
-  }
   return null;
 }
 
@@ -63,77 +61,100 @@ function computeQualityLevel(body: {
   const hasDescriptor =
     body.safeDescriptor &&
     typeof body.safeDescriptor === "object" &&
-    Object.values(body.safeDescriptor as Record<string, unknown>).some((v) => v != null);
-
-  if (body.evidenceType !== "withheld" && body.eventType !== "withheld" && hasDescriptor) {
+    Object.values(body.safeDescriptor as Record<string, unknown>).some(
+      (v) => v != null
+    );
+  if (body.evidenceType !== "withheld" && body.eventType !== "withheld" && hasDescriptor)
     return "A";
-  }
-  if (body.evidenceType !== "withheld" && hasDescriptor) {
-    return "B";
-  }
-  if (body.evidenceType === "written testimony" || !hasDescriptor) {
-    return "C";
-  }
+  if (body.evidenceType !== "withheld" && hasDescriptor) return "B";
   return "C";
 }
 
+/** Serialize a DB record to the API shape — always uses server-side timestamps. */
+function serializeRecord(r: typeof witnessRecordsTable.$inferSelect) {
+  return {
+    id: r.id,
+    packageHash: r.packageHash,
+    eventType: r.eventType,
+    evidenceType: r.evidenceType,
+    country: r.country,
+    region: r.region,
+    city: r.city,
+    safeDescriptor: r.safeDescriptor,
+    status: r.status,
+    qualityLevel: r.qualityLevel,
+    publicWarning: r.publicWarning,
+    // Local time claimed by the user's device at fingerprint creation
+    createdAtLocal: r.createdAtLocal,
+    // Authoritative server receipt time — never comes from the client
+    serverReceivedAtUtc: r.serverReceivedAtUtc.toISOString(),
+    isDemo: r.isDemo,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GET /records/stats — must be registered before /records/:packageHash
+// ──────────────────────────────────────────────────────────────────────────────
 router.get("/records/stats", async (req, res): Promise<void> => {
-  const total = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(witnessRecordsTable)
-    .where(eq(witnessRecordsTable.qualityLevel, "A"))
-    .then((r) => 0)
-    .catch(() => 0);
-
-  const totalResult = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(witnessRecordsTable);
-  const totalCount = totalResult[0]?.count ?? 0;
-
-  const byEventType = await db
-    .select({
-      key: witnessRecordsTable.eventType,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(witnessRecordsTable)
-    .groupBy(witnessRecordsTable.eventType)
-    .orderBy(desc(sql`count(*)`));
-
-  const byCountry = await db
-    .select({
-      key: witnessRecordsTable.country,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(witnessRecordsTable)
-    .where(sql`${witnessRecordsTable.country} is not null`)
-    .groupBy(witnessRecordsTable.country)
-    .orderBy(desc(sql`count(*)`));
-
-  const byQualityLevel = await db
-    .select({
-      key: witnessRecordsTable.qualityLevel,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(witnessRecordsTable)
-    .groupBy(witnessRecordsTable.qualityLevel)
-    .orderBy(witnessRecordsTable.qualityLevel);
-
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentResult = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(witnessRecordsTable)
-    .where(sql`${witnessRecordsTable.createdAt} > ${oneDayAgo}`);
-  const recentCount = recentResult[0]?.count ?? 0;
+  const [totalResult, byEventType, byCountry, byQualityLevel, recentResult] =
+    await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(witnessRecordsTable),
+      db
+        .select({
+          key: witnessRecordsTable.eventType,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(witnessRecordsTable)
+        .groupBy(witnessRecordsTable.eventType)
+        .orderBy(desc(sql`count(*)`)),
+      db
+        .select({
+          key: witnessRecordsTable.country,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(witnessRecordsTable)
+        .where(sql`${witnessRecordsTable.country} is not null`)
+        .groupBy(witnessRecordsTable.country)
+        .orderBy(desc(sql`count(*)`)),
+      db
+        .select({
+          key: witnessRecordsTable.qualityLevel,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(witnessRecordsTable)
+        .groupBy(witnessRecordsTable.qualityLevel)
+        .orderBy(witnessRecordsTable.qualityLevel),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(witnessRecordsTable)
+        .where(
+          sql`${witnessRecordsTable.serverReceivedAtUtc} > now() - interval '24 hours'`
+        ),
+    ]);
 
   res.json({
-    total: totalCount,
-    byEventType: byEventType.map((r) => ({ key: r.key ?? "unknown", count: r.count })),
-    byCountry: byCountry.map((r) => ({ key: r.key ?? "unknown", count: r.count })),
-    byQualityLevel: byQualityLevel.map((r) => ({ key: r.key, count: r.count })),
-    recentCount,
+    total: totalResult[0]?.count ?? 0,
+    byEventType: byEventType.map((r) => ({
+      key: r.key ?? "unknown",
+      count: r.count,
+    })),
+    byCountry: byCountry.map((r) => ({
+      key: r.key ?? "unknown",
+      count: r.count,
+    })),
+    byQualityLevel: byQualityLevel.map((r) => ({
+      key: r.key,
+      count: r.count,
+    })),
+    recentCount: recentResult[0]?.count ?? 0,
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────────
+// GET /records
+// ──────────────────────────────────────────────────────────────────────────────
 router.get("/records", async (req, res): Promise<void> => {
   const parsed = ListRecordsQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -160,7 +181,7 @@ router.get("/records", async (req, res): Promise<void> => {
       .select()
       .from(witnessRecordsTable)
       .where(whereClause)
-      .orderBy(desc(witnessRecordsTable.createdAt))
+      .orderBy(desc(witnessRecordsTable.serverReceivedAtUtc))
       .limit(Math.min(limit, 100))
       .offset(offset),
     db
@@ -170,27 +191,21 @@ router.get("/records", async (req, res): Promise<void> => {
   ]);
 
   res.json({
-    records: records.map((r) => ({
-      id: r.id,
-      packageHash: r.packageHash,
-      eventType: r.eventType,
-      evidenceType: r.evidenceType,
-      country: r.country,
-      region: r.region,
-      city: r.city,
-      safeDescriptor: r.safeDescriptor,
-      status: r.status,
-      qualityLevel: r.qualityLevel,
-      publicWarning: r.publicWarning,
-      createdAtUtc: r.createdAtUtc,
-      isDemo: r.isDemo,
-    })),
+    records: records.map(serializeRecord),
     total: countResult[0]?.count ?? 0,
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────────
+// POST /records
+// The server sets serverReceivedAtUtc exclusively — any field named
+// serverReceivedAtUtc coming from the client is ignored by the Zod schema.
+// ──────────────────────────────────────────────────────────────────────────────
 router.post("/records", async (req, res): Promise<void> => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+  const ip =
+    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+    req.ip ||
+    "unknown";
 
   if (!checkRateLimit(ip)) {
     res.status(429).json({ error: "Rate limit exceeded. Please try again later." });
@@ -205,17 +220,26 @@ router.post("/records", async (req, res): Promise<void> => {
 
   const body = parsed.data;
 
+  // Honeypot — silently accept bots without storing anything
   if (body.honeypot) {
     res.status(201).json({ message: "ok" });
     return;
   }
 
-  if (!body.packageHash || body.packageHash.length !== 64 || !/^[a-f0-9]+$/i.test(body.packageHash)) {
-    res.status(400).json({ error: "Invalid package hash format. Expected SHA-256 hex string." });
+  if (
+    !body.packageHash ||
+    body.packageHash.length !== 64 ||
+    !/^[a-f0-9]+$/i.test(body.packageHash)
+  ) {
+    res.status(400).json({
+      error: "Invalid package hash format. Expected SHA-256 hex string.",
+    });
     return;
   }
 
-  const noteError = validatePublicNote((body as Record<string, unknown>).publicNote as string | null);
+  const noteError = validatePublicNote(
+    (body as Record<string, unknown>).publicNote as string | null
+  );
   if (noteError) {
     res.status(400).json({ error: noteError });
     return;
@@ -228,12 +252,16 @@ router.post("/records", async (req, res): Promise<void> => {
     .limit(1);
 
   if (existing.length > 0) {
-    res.status(409).json({ error: "A record with this package hash already exists." });
+    res.status(409).json({
+      error: "A record with this package hash already exists.",
+    });
     return;
   }
 
   const qualityLevel = computeQualityLevel(body);
 
+  // serverReceivedAtUtc is set by defaultNow() in the schema —
+  // the value from body.createdAtLocal is stored as-is for display only.
   const [record] = await db
     .insert(witnessRecordsTable)
     .values({
@@ -247,31 +275,24 @@ router.post("/records", async (req, res): Promise<void> => {
       status: body.status,
       qualityLevel: body.qualityLevel ?? qualityLevel,
       publicWarning: body.publicWarning,
-      createdAtUtc: body.createdAtUtc,
+      createdAtLocal: body.createdAtLocal,   // from client device clock, stored verbatim
+      // serverReceivedAtUtc — NOT set here, DB default (now()) handles it
       isDemo: false,
       submitterIp: getIpHash(ip),
     })
     .returning();
 
-  req.log.info({ packageHash: body.packageHash, qualityLevel }, "New witness record submitted");
+  req.log.info(
+    { packageHash: body.packageHash, qualityLevel },
+    "New witness record submitted"
+  );
 
-  res.status(201).json({
-    id: record.id,
-    packageHash: record.packageHash,
-    eventType: record.eventType,
-    evidenceType: record.evidenceType,
-    country: record.country,
-    region: record.region,
-    city: record.city,
-    safeDescriptor: record.safeDescriptor,
-    status: record.status,
-    qualityLevel: record.qualityLevel,
-    publicWarning: record.publicWarning,
-    createdAtUtc: record.createdAtUtc,
-    isDemo: record.isDemo,
-  });
+  res.status(201).json(serializeRecord(record));
 });
 
+// ──────────────────────────────────────────────────────────────────────────────
+// GET /records/:packageHash
+// ──────────────────────────────────────────────────────────────────────────────
 router.get("/records/:packageHash", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.packageHash)
     ? req.params.packageHash[0]
@@ -294,21 +315,7 @@ router.get("/records/:packageHash", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({
-    id: record.id,
-    packageHash: record.packageHash,
-    eventType: record.eventType,
-    evidenceType: record.evidenceType,
-    country: record.country,
-    region: record.region,
-    city: record.city,
-    safeDescriptor: record.safeDescriptor,
-    status: record.status,
-    qualityLevel: record.qualityLevel,
-    publicWarning: record.publicWarning,
-    createdAtUtc: record.createdAtUtc,
-    isDemo: record.isDemo,
-  });
+  res.json(serializeRecord(record));
 });
 
 export default router;

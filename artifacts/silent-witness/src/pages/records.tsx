@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import {
   useListRecords,
@@ -28,6 +29,7 @@ import { Database, Filter, Calendar, MapPin } from "lucide-react";
 import { format } from "date-fns";
 
 export default function Registry() {
+  const [, navigate] = useLocation();
   const [filters, setFilters] = useState({
     eventType: "",
     evidenceType: "",
@@ -241,12 +243,17 @@ export default function Registry() {
                     </TableRow>
                   )
                   : recordsData?.records.map((record) => (
-                      <TableRow key={record.id} data-testid={`row-record-${record.id}`}>
+                      <TableRow
+                        key={record.id}
+                        data-testid={`row-record-${record.id}`}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => navigate(`/records/${record.packageHash}`)}
+                      >
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           <div className="flex items-center gap-1.5">
                             <Calendar className="w-3 h-3 flex-shrink-0" />
                             {format(
-                              new Date(record.createdAtUtc),
+                              new Date(record.serverReceivedAtUtc),
                               "yyyy-MM-dd"
                             )}
                           </div>
@@ -311,8 +318,9 @@ export default function Registry() {
             : recordsData?.records.map((record) => (
                 <div
                   key={record.id}
-                  className="bg-card border border-border rounded-lg p-4 space-y-3"
+                  className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer hover:border-primary/40 transition-colors"
                   data-testid={`card-record-${record.id}`}
+                  onClick={() => navigate(`/records/${record.packageHash}`)}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-0.5">
@@ -333,7 +341,7 @@ export default function Registry() {
                   <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {format(new Date(record.createdAtUtc), "yyyy-MM-dd")}
+                      {format(new Date(record.serverReceivedAtUtc), "yyyy-MM-dd")}
                     </span>
                     {[record.city, record.region, record.country]
                       .filter(Boolean)

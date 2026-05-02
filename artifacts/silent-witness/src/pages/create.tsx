@@ -258,7 +258,7 @@ export default function CreateRecord() {
           ? fileEntries[0].safeDescriptor
           : { mediaType: "package", fileCount: fileEntries.length },
       fileHashes: fileEntries,
-      createdAtUtc: new Date().toISOString(),
+      createdAtLocal: new Date().toISOString(),
       status: "timestamped_only_not_verified",
       publicWarning:
         "Original evidence is not shared. This record does not prove guilt or truth.",
@@ -323,7 +323,7 @@ export default function CreateRecord() {
           status: String(pub.status),
           qualityLevel: recordType === "package" ? "A" : recordType === "file" ? "B" : "C",
           publicWarning: String(pub.publicWarning),
-          createdAtUtc: String(pub.createdAtUtc),
+          createdAtLocal: String(pub.createdAtLocal),
         },
       },
       {
