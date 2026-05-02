@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +15,11 @@ import {
   Loader2,
   AlertTriangle,
   Info,
+  Database,
+  ExternalLink,
 } from "lucide-react";
 import { sha256 } from "@/lib/crypto";
+import { getRecord } from "@workspace/api-client-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +75,124 @@ function parseManifest(text: string): ManifestData | null {
   } catch {
     return null;
   }
+}
+
+const HEX64 = /^[0-9a-f]{64}$/i;
+
+// ── Registry Lookup ────────────────────────────────────────────────────────────
+
+function RegistryLookupMode() {
+  const [hashInput, setHashInput] = useState("");
+  const [status, setStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "found"; url: string; serverReceivedAtUtc: string }
+    | { kind: "not-found" }
+    | { kind: "invalid" }
+  >({ kind: "idle" });
+
+  const handleSearch = useCallback(async () => {
+    const trimmed = hashInput.trim().toLowerCase();
+    if (!trimmed) return;
+    if (!HEX64.test(trimmed)) {
+      setStatus({ kind: "invalid" });
+      return;
+    }
+    setStatus({ kind: "loading" });
+    try {
+      const record = await getRecord(trimmed);
+      setStatus({
+        kind: "found",
+        url: `/records/${trimmed}`,
+        serverReceivedAtUtc: String(record.serverReceivedAtUtc ?? ""),
+      });
+    } catch {
+      setStatus({ kind: "not-found" });
+    }
+  }, [hashInput]);
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-muted/40 border border-border rounded-lg p-4 text-sm text-muted-foreground leading-relaxed flex items-start gap-2">
+        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <span>
+          Paste a SHA-256 fingerprint to check whether it has been registered in the public
+          registry. No file is uploaded.
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="registry-hash-input">SHA-256 Fingerprint (64 hex characters)</Label>
+        <div className="flex gap-2">
+          <Input
+            id="registry-hash-input"
+            value={hashInput}
+            onChange={(e) => { setHashInput(e.target.value); setStatus({ kind: "idle" }); }}
+            onKeyDown={(e) => e.key === "Enter" && void handleSearch()}
+            placeholder="e.g. a3f5c2…"
+            className="font-mono text-xs sm:text-sm"
+            data-testid="input-registry-hash"
+          />
+          <Button
+            onClick={() => void handleSearch()}
+            disabled={status.kind === "loading"}
+            data-testid="button-registry-search"
+          >
+            {status.kind === "loading" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {status.kind === "invalid" && (
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <XCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-destructive">
+            A SHA-256 fingerprint must be exactly 64 lowercase hexadecimal characters.
+          </p>
+        </div>
+      )}
+
+      {status.kind === "not-found" && (
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
+          <XCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-muted-foreground">
+            No public registry record was found for this fingerprint.
+          </p>
+        </div>
+      )}
+
+      {status.kind === "found" && (
+        <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+          <div className="space-y-1.5 min-w-0">
+            <p className="text-sm font-semibold text-primary">
+              Fingerprint found in the public registry.
+            </p>
+            {status.serverReceivedAtUtc && (
+              <p className="text-xs text-muted-foreground">
+                Registry received:{" "}
+                <span className="font-mono">
+                  {new Date(status.serverReceivedAtUtc).toUTCString()}
+                </span>
+              </p>
+            )}
+            <Link
+              href={status.url}
+              className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-2 hover:no-underline mt-1"
+              data-testid="link-registry-record"
+            >
+              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+              View full record
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -632,6 +754,14 @@ export default function Verify() {
                 <ShieldCheck className="w-4 h-4 flex-shrink-0" />
                 Manifest Integrity
               </TabsTrigger>
+              <TabsTrigger
+                value="registry-lookup"
+                className="flex-1 flex items-center gap-1.5 text-xs sm:text-sm"
+                data-testid="tab-registry-lookup"
+              >
+                <Database className="w-4 h-4 flex-shrink-0" />
+                Registry Lookup
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="file-vs-manifest">
@@ -642,6 +772,9 @@ export default function Verify() {
             </TabsContent>
             <TabsContent value="manifest-integrity">
               <ManifestIntegrityMode />
+            </TabsContent>
+            <TabsContent value="registry-lookup">
+              <RegistryLookupMode />
             </TabsContent>
           </Tabs>
         </div>

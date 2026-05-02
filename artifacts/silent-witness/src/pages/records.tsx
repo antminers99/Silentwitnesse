@@ -22,11 +22,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
-import { Database, Filter, Calendar, MapPin } from "lucide-react";
+import { Database, Filter, Calendar, MapPin, Search } from "lucide-react";
 import { format } from "date-fns";
+
+const HEX64 = /^[0-9a-f]{64}$/i;
 
 export default function Registry() {
   const [, navigate] = useLocation();
@@ -37,6 +40,19 @@ export default function Registry() {
     country: "",
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [hashSearch, setHashSearch] = useState("");
+  const [hashError, setHashError] = useState<string | null>(null);
+
+  const handleHashLookup = () => {
+    const trimmed = hashSearch.trim().toLowerCase();
+    if (!trimmed) return;
+    if (!HEX64.test(trimmed)) {
+      setHashError("A SHA-256 fingerprint is 64 lowercase hexadecimal characters.");
+      return;
+    }
+    setHashError(null);
+    navigate(`/records/${trimmed}`);
+  };
 
   const { data: stats, isLoading: statsLoading } = useGetRecordStats();
 
@@ -73,6 +89,30 @@ export default function Registry() {
           <p className="text-base sm:text-lg text-muted-foreground">
             A public ledger of timestamped evidence fingerprints.
           </p>
+        </div>
+
+        {/* Hash Lookup */}
+        <div className="mb-6 sm:mb-8 bg-card border border-border rounded-lg p-4 sm:p-5">
+          <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+            <Search className="w-3.5 h-3.5 flex-shrink-0" />
+            Look up a record by SHA-256 fingerprint
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={hashSearch}
+              onChange={(e) => { setHashSearch(e.target.value); setHashError(null); }}
+              onKeyDown={(e) => e.key === "Enter" && handleHashLookup()}
+              placeholder="Paste a 64-character hex fingerprint…"
+              className="font-mono text-xs sm:text-sm"
+              data-testid="input-hash-search"
+            />
+            <Button onClick={handleHashLookup} variant="outline" className="flex-shrink-0">
+              Look up
+            </Button>
+          </div>
+          {hashError && (
+            <p className="text-xs text-destructive mt-1.5">{hashError}</p>
+          )}
         </div>
 
         {/* Stats Bar */}

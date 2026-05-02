@@ -246,14 +246,29 @@ router.post("/records", async (req, res): Promise<void> => {
   }
 
   const existing = await db
-    .select({ id: witnessRecordsTable.id })
+    .select({
+      id: witnessRecordsTable.id,
+      serverReceivedAtUtc: witnessRecordsTable.serverReceivedAtUtc,
+    })
     .from(witnessRecordsTable)
     .where(eq(witnessRecordsTable.packageHash, body.packageHash))
     .limit(1);
 
   if (existing.length > 0) {
     res.status(409).json({
-      error: "A record with this package hash already exists.",
+      status: "already_registered",
+      error: "already_registered",
+      recordUrl: `/records/${body.packageHash}`,
+      serverReceivedAtUtc: existing[0]!.serverReceivedAtUtc.toISOString(),
+    });
+    return;
+  }
+
+  // Quality D records may be saved locally but are not accepted into the public registry
+  if ((body.qualityLevel ?? "C") === "D") {
+    res.status(400).json({
+      error:
+        "Low-quality records can be saved locally but are not accepted into the public registry.",
     });
     return;
   }

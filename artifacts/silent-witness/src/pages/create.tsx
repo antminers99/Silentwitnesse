@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +13,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Shield,
+  ShieldAlert,
   Upload,
   FileText,
   Check,
@@ -24,6 +34,7 @@ import {
   Copy,
   Share2,
   File,
+  ExternalLink,
 } from "lucide-react";
 import {
   sha256,
@@ -33,6 +44,7 @@ import {
   detectAudioDuration,
 } from "@/lib/crypto";
 import { useCreateRecord } from "@workspace/api-client-react";
+import type { ApiError } from "@workspace/api-client-react";
 
 type RecordType = "file" | "testimony" | "package";
 
@@ -95,6 +107,8 @@ export default function CreateRecord() {
   const [noteWarning, setNoteWarning] = useState<string | null>(null);
 
   const [manifest, setManifest] = useState<Record<string, unknown> | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [alreadyRegisteredUrl, setAlreadyRegisteredUrl] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -304,16 +318,23 @@ export default function CreateRecord() {
     );
   };
 
+  const openSubmitDialog = () => {
+    if (!manifest) return;
+    setShowConfirmDialog(true);
+  };
+
   const submitToRegistry = () => {
     if (!manifest) return;
+    setShowConfirmDialog(false);
     const pub = { ...manifest };
     delete pub.privateNote;
     const loc = pub.location as { country: string; region: string; city: string };
+    const hash = String(pub.packageHash);
 
     createRecord.mutate(
       {
         data: {
-          packageHash: String(pub.packageHash),
+          packageHash: hash,
           eventType: String(pub.eventType),
           evidenceType: String(pub.evidenceType),
           country: loc.country !== "withheld" ? loc.country : null,
@@ -329,8 +350,14 @@ export default function CreateRecord() {
       {
         onSuccess: () =>
           toast({ title: "Submitted", description: "Public fingerprint added to registry." }),
-        onError: () =>
-          toast({ title: "Submission failed", variant: "destructive" }),
+        onError: (err) => {
+          const apiErr = err as ApiError<{ status?: string; error?: string }>;
+          if (apiErr.status === 409 && apiErr.data?.status === "already_registered") {
+            setAlreadyRegisteredUrl(`/records/${hash}`);
+          } else {
+            toast({ title: "Submission failed", variant: "destructive" });
+          }
+        },
       }
     );
   };
@@ -702,8 +729,8 @@ export default function CreateRecord() {
               </Button>
               <Button
                 className="h-14 sm:h-16 flex flex-col items-center justify-center gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={submitToRegistry}
-                disabled={createRecord.isPending}
+                onClick={openSubmitDialog}
+                disabled={createRecord.isPending || !!alreadyRegisteredUrl}
                 data-testid="button-submit-registry"
               >
                 <Upload className="w-4 h-4" />
@@ -713,12 +740,77 @@ export default function CreateRecord() {
               </Button>
             </div>
 
+            {alreadyRegisteredUrl && (
+              <div className="flex items-start gap-3 bg-muted border border-border rounded-lg p-4 text-sm">
+                <Check className="w-4 h-4 flex-shrink-0 text-primary mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">
+                    This fingerprint is already in the public registry.
+                  </p>
+                  <Link
+                    href={alreadyRegisteredUrl}
+                    className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-2 hover:no-underline"
+                    data-testid="link-already-registered"
+                  >
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    View existing record
+                  </Link>
+                </div>
+              </div>
+            )}
+
             <div className="text-center text-xs sm:text-sm text-muted-foreground pt-2">
-              A fingerprint is not proof that an event happened.
+              Silent Witness may help show that a matching file, text, or evidence package
+              existed before a recorded time. It does not prove that an event happened,
+              identify a perpetrator, or guarantee legal admissibility.
             </div>
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              Confirm Public Submission
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-1 text-sm text-muted-foreground leading-relaxed">
+                <p>
+                  You are about to submit only the fingerprint and safe public metadata.
+                  The original evidence file will not be uploaded.
+                </p>
+                <p className="font-medium text-foreground border-l-2 border-amber-400 pl-3">
+                  Do not include names, exact locations, or accusations in public notes.
+                </p>
+                <p>
+                  Once submitted, the fingerprint and metadata will be visible in the public
+                  registry. This action cannot be undone.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmDialog(false)}
+              data-testid="button-confirm-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitToRegistry}
+              disabled={createRecord.isPending}
+              data-testid="button-confirm-submit"
+            >
+              {createRecord.isPending ? "Submitting…" : "Submit fingerprint only"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </Layout>
   );
 }

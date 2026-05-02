@@ -48,8 +48,7 @@ export default function Home() {
                   <span className="hidden sm:inline">2. </span>Local Fingerprint
                 </div>
                 <div className="text-muted-foreground text-sm leading-snug">
-                  Browser computes a cryptographic hash. Original stays on
-                  device.
+                  Browser computes a cryptographic hash. Original stays on device.
                 </div>
               </div>
             </div>
@@ -65,8 +64,7 @@ export default function Home() {
                   <span className="hidden sm:inline">3. </span>Publish Record
                 </div>
                 <div className="text-muted-foreground text-sm leading-snug">
-                  Save proof package or publish only the fingerprint to the
-                  registry.
+                  Save proof package or publish only the fingerprint to the registry.
                 </div>
               </div>
             </div>
@@ -112,8 +110,9 @@ export default function Home() {
 
         <div className="mt-10 sm:mt-16">
           <div className="bg-muted text-muted-foreground px-4 py-3 rounded text-xs sm:text-sm border border-border leading-relaxed text-center">
-            <strong>Critical Disclaimer:</strong> A fingerprint is not proof
-            that an event happened. It is a timestamped reference only.
+            Silent Witness may help show that a matching file, text, or evidence package existed
+            before a recorded time. It does not prove that an event happened, identify a
+            perpetrator, or guarantee legal admissibility.
           </div>
         </div>
       </div>

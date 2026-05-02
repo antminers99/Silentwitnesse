@@ -161,6 +161,14 @@ export default function RecordDetail() {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 What this record proves
               </h2>
+              <div className="flex items-start gap-3 bg-destructive/5 border border-destructive/20 rounded-lg p-4">
+                <ShieldAlert className="w-4 h-4 flex-shrink-0 text-destructive mt-0.5" />
+                <p className="text-sm text-destructive/90 leading-relaxed font-medium">
+                  This record is a timestamped fingerprint only. It is not public proof that
+                  the event happened. Verification requires the original file or text to match
+                  the stored fingerprint.
+                </p>
+              </div>
               <div className="flex items-start gap-3 bg-muted/40 border border-border rounded-lg p-4">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0 text-muted-foreground mt-0.5" />
                 <p className="text-sm text-muted-foreground leading-relaxed">

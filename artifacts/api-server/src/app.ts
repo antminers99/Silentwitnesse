@@ -26,8 +26,9 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 100 kb hard cap — the API accepts only fingerprints and metadata, never files or base64
+app.use(express.json({ limit: "100kb" }));
+// urlencoded not needed for a JSON-only API; omitting it removes a potential attack surface
 
 app.use("/api", router);
 
