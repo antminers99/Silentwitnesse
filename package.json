@@ -1,7 +1,28 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
+  "name": "silent-witness",
+  "version": "0.1.0",
+  "description": "Privacy-first evidence fingerprinting tool. Hash files locally in the browser. Never upload original evidence.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silent-witness/silent-witness"
+  },
+  "keywords": [
+    "silent-witness",
+    "evidence",
+    "hashing",
+    "sha256",
+    "osint",
+    "human-rights",
+    "privacy",
+    "journalism",
+    "verification",
+    "open-source"
+  ],
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",

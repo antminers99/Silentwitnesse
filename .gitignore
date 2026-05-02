@@ -1,15 +1,36 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# Silent Witness — .gitignore
 
 # compiled output
-dist
-tmp
-out-tsc
+dist/
+build/
+tmp/
+out-tsc/
 *.tsbuildinfo
-.expo
-.expo-shared
+.vite/
+.expo/
+.expo-shared/
 
 # dependencies
-node_modules
+node_modules/
+
+# environment secrets — never commit
+.env
+.env.*
+!.env.example
+
+# database local files
+*.db
+*.sqlite
+*.sqlite3
+
+# logs
+*.log
+npm-debug.log*
+yarn-error.log
+pnpm-debug.log*
+
+# coverage
+coverage/
 
 # IDEs and editors
 /.idea
@@ -19,31 +40,25 @@ node_modules
 *.launch
 .settings/
 *.sublime-workspace
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
-
 # System Files
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
+# Replit internals — not needed in repo
 .cache/
 .local/
+.agents/
+attached_assets/
+*.zip
+.replit
+.replitignore
+
+# NX / Cursor legacy
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
