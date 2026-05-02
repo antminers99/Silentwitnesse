@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
+import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { useLang } from "@/hooks/useLang";
+import { SUPPORTED_LANGS } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,6 +91,8 @@ const RECORD_TYPES: { value: RecordType; label: string; icon: React.ReactNode; d
 ];
 
 export default function CreateRecord() {
+  const { t } = useTranslation();
+  const { lang, langHref } = useLang();
   const { toast } = useToast();
   const createRecord = useCreateRecord();
 
@@ -354,7 +360,7 @@ export default function CreateRecord() {
         onError: (err) => {
           const apiErr = err as ApiError<{ status?: string; error?: string }>;
           if (apiErr.status === 409 && apiErr.data?.status === "already_registered") {
-            setAlreadyRegisteredUrl(`/records/${hash}`);
+            setAlreadyRegisteredUrl(langHref(`/records/${hash}`));
           } else {
             toast({ title: "Submission failed", variant: "destructive" });
           }
@@ -365,13 +371,24 @@ export default function CreateRecord() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>{t("seo.createTitle")}</title>
+        <meta name="description" content={t("seo.createDesc")} />
+        <link rel="canonical" href={`https://silentwi.com/${lang}/create`} />
+        <meta property="og:title" content={t("seo.createTitle")} />
+        <meta property="og:description" content={t("seo.createDesc")} />
+        <meta name="twitter:card" content="summary" />
+        {SUPPORTED_LANGS.map((l) => (
+          <link key={l} rel="alternate" hrefLang={l} href={`https://silentwi.com/${l}/create`} />
+        ))}
+      </Helmet>
       <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-serif text-primary tracking-tight mb-2">
-            Create Witness Record
+            {t("create.title")}
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Generate a cryptographic fingerprint without exposing the original data.
+            {t("create.subtitle")}
           </p>
         </div>
 
@@ -411,10 +428,10 @@ export default function CreateRecord() {
         <Alert className="mb-6 sm:mb-8 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900">
           <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
           <AlertTitle className="text-blue-800 dark:text-blue-300 font-semibold text-sm">
-            Processing locally. Your file is not uploaded.
+            {t("create.localNotice")}
           </AlertTitle>
           <AlertDescription className="text-blue-700/80 dark:text-blue-400/80 text-xs sm:text-sm">
-            All cryptographic operations happen in your browser memory.
+            {t("create.localNoticeDesc")}
           </AlertDescription>
         </Alert>
 

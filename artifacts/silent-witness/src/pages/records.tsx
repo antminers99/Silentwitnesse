@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
+import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { useLang } from "@/hooks/useLang";
 import {
   useListRecords,
   getListRecordsQueryKey,
@@ -32,6 +35,8 @@ import { format } from "date-fns";
 const HEX64 = /^[0-9a-f]{64}$/i;
 
 export default function Registry() {
+  const { t } = useTranslation();
+  const { lang, langHref } = useLang();
   const [, navigate] = useLocation();
   const [filters, setFilters] = useState({
     eventType: "",
@@ -51,7 +56,7 @@ export default function Registry() {
       return;
     }
     setHashError(null);
-    navigate(`/records/${trimmed}`);
+    navigate(langHref(`/records/${trimmed}`));
   };
 
   const { data: stats, isLoading: statsLoading } = useGetRecordStats();
@@ -79,15 +84,23 @@ export default function Registry() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>{t("seo.registryTitle")}</title>
+        <meta name="description" content={t("seo.registryDesc")} />
+        <link rel="canonical" href={`https://silentwi.com/${lang}/records`} />
+        <meta property="og:title" content={t("seo.registryTitle")} />
+        <meta property="og:description" content={t("seo.registryDesc")} />
+        <meta name="twitter:card" content="summary" />
+      </Helmet>
       <div className="max-w-6xl mx-auto px-4 py-8 sm:py-12">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-serif text-primary tracking-tight mb-2 flex items-center gap-2 sm:gap-3">
             <Database className="w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0" />
-            Public Registry
+            {t("records.title")}
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground">
-            A structured public ledger of timestamped evidence fingerprints.
+            {t("records.subtitle")}
           </p>
         </div>
 
@@ -148,10 +161,8 @@ export default function Registry() {
           <Card className="col-span-2">
             <CardContent className="p-3 sm:p-4">
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                <strong className="text-foreground">Fingerprint only — not verified truth. </strong>
-                No names, no accusations, no precise locations, no original evidence.
-                Records are structured fingerprints accepted automatically when they pass safety
-                and quality checks.
+                <strong className="text-foreground">{t("records.fingerprintOnlyBadge")} </strong>
+                {t("records.fingerprintNotice")}
               </p>
             </CardContent>
           </Card>
@@ -287,7 +298,7 @@ export default function Registry() {
                         key={record.id}
                         data-testid={`row-record-${record.id}`}
                         className="cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => navigate(`/records/${record.packageHash}`)}
+                        onClick={() => navigate(langHref(`/records/${record.packageHash}`))}
                       >
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           <div className="flex items-center gap-1.5">
@@ -360,7 +371,7 @@ export default function Registry() {
                   key={record.id}
                   className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer hover:border-primary/40 transition-colors"
                   data-testid={`card-record-${record.id}`}
-                  onClick={() => navigate(`/records/${record.packageHash}`)}
+                  onClick={() => navigate(langHref(`/records/${record.packageHash}`))}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-0.5">

@@ -1,6 +1,9 @@
 import React from "react";
 import { useParams, Link } from "wouter";
+import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { useLang } from "@/hooks/useLang";
 import { useGetRecord, getGetRecordQueryKey } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,6 +47,8 @@ const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secon
 };
 
 export default function RecordDetail() {
+  const { t } = useTranslation();
+  const { lang, langHref } = useLang();
   const params = useParams<{ packageHash: string }>();
   const packageHash = params.packageHash ?? "";
 
@@ -62,13 +67,18 @@ export default function RecordDetail() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>{t("seo.registryTitle")}</title>
+        <meta name="description" content={t("seo.registryDesc")} />
+        <link rel="canonical" href={`https://silentwi.com/${lang}/records/${packageHash}`} />
+      </Helmet>
       <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
         <Link
-          href="/records"
+          href={langHref("/records")}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Registry
+          {t("common.backToRegistry")}
         </Link>
 
         {isLoading && (

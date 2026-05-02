@@ -1,10 +1,27 @@
 import React from "react";
+import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { useLang } from "@/hooks/useLang";
+import { SUPPORTED_LANGS } from "@/i18n";
 import { FileText, ShieldAlert } from "lucide-react";
 
 export default function Protocol() {
+  const { t } = useTranslation();
+  const { lang } = useLang();
   return (
     <Layout>
+      <Helmet>
+        <title>{t("seo.protocolTitle")}</title>
+        <meta name="description" content={t("seo.protocolDesc")} />
+        <link rel="canonical" href={`https://silentwi.com/${lang}/protocol`} />
+        <meta property="og:title" content={t("seo.protocolTitle")} />
+        <meta property="og:description" content={t("seo.protocolDesc")} />
+        <meta name="twitter:card" content="summary" />
+        {SUPPORTED_LANGS.map((l) => (
+          <link key={l} rel="alternate" hrefLang={l} href={`https://silentwi.com/${l}/protocol`} />
+        ))}
+      </Helmet>
       <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
         <div className="mb-8 sm:mb-12">
           <h1 className="text-2xl sm:text-3xl font-serif text-primary tracking-tight mb-3 flex items-center gap-2 sm:gap-3">

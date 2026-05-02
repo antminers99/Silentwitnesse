@@ -12,7 +12,10 @@ Silent Witness does NOT publish original evidence files. It only creates and sto
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **Frontend**: React + Vite + Tailwind CSS (artifacts/silent-witness)
+- **Frontend**: React + Vite + Wouter v3 + Tailwind CSS (artifacts/silent-witness)
+- **i18n**: react-i18next (11 languages, RTL: ar/fa/ku)
+- **SEO**: react-helmet-async (per-page Helmet, hreflang, OG tags)
+- **QR codes**: qrcode.react (share page)
 - **API framework**: Express 5 (artifacts/api-server)
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
@@ -150,15 +153,36 @@ lib/
   db/                — Drizzle ORM schema + client
 ```
 
+## Internationalisation (i18n)
+
+- **Library**: react-i18next
+- **Languages**: English · العربية · Français · Español · Deutsch · Türkçe · Русский · فارسی · Kurdî · Português · Українська (11 total)
+- **Locale files**: `artifacts/silent-witness/src/i18n/locales/<lang>.json`
+- **Setup**: `artifacts/silent-witness/src/i18n/index.ts` (exports `SUPPORTED_LANGS`, `RTL_LANGS`, `isValidLang`, `detectBrowserLang`)
+- **RTL support**: Arabic, Farsi, Kurdish flip `document.documentElement.dir = "rtl"` via the `LanguageSync` component in App.tsx
+- **Language routing**: All routes are prefixed `/:lang/*`. Legacy `/create` etc. redirect to `/:lang/` via `LangRedirect`.
+- **Language selector**: Globe icon dropdown in the nav header (layout.tsx). Persists choice to `localStorage` key `sw-lang`.
+- **SEO**: react-helmet-async on every page. Each page sets `<title>`, `<meta name="description">`, Open Graph, `canonical`, and `hreflang` alternate links for all 11 languages.
+- **useLang hook**: `artifacts/silent-witness/src/hooks/useLang.ts` — extracts current lang from URL, exposes `lang`, `isRtl`, `langHref(path)`.
+
 ## Pages
 
-- `/` — Home: explanation of how the tool works, primary action buttons
-- `/create` — Create Witness Record: 3-step flow (type selection → safe context → generate & download)
-- `/verify` — Verify Evidence: file vs hash, file vs manifest, registry lookup; compression warning on no-match
-- `/records` — Public Registry: only `accepted_public` and `exact_match_published` records shown
-- `/records/:packageHash` — Record Detail: publication status, all timestamps with trust labels, original hash, safe copy hash
-- `/protocol` — Protocol paper: full explanation of what the tool does and does not prove
-- `/safety` — Safety guide: field-safety advice for witnesses and journalists
+All routes are prefixed with `/:lang/` (e.g. `/en/create`, `/ar/verify`).
+
+- `/` → redirect to `/:lang/` based on browser language or `localStorage`
+- `/:lang/` — Home
+- `/:lang/create` — Create Witness Record: 3-step flow (type selection → safe context → generate & download)
+- `/:lang/verify` — Verify Evidence: file vs hash, file vs manifest, registry lookup; compression warning on no-match
+- `/:lang/records` — Public Registry: only `accepted_public` and `exact_match_published` records shown
+- `/:lang/records/:packageHash` — Record Detail: publication status, all timestamps with trust labels
+- `/:lang/how-it-works` — Plain-language explanation of fingerprinting
+- `/:lang/for-witnesses` — Guide for people with evidence they cannot safely share
+- `/:lang/for-journalists` — Guide for journalists working with sources
+- `/:lang/for-human-rights` — Guide for human rights documentation groups
+- `/:lang/offline` — Instructions for using Silent Witness offline
+- `/:lang/share` — QR code + copyable message + printable poster (qrcode.react)
+- `/:lang/protocol` — Full technical protocol paper
+- `/:lang/safety` — Safety guide for witnesses and journalists
 
 ## Key Commands
 

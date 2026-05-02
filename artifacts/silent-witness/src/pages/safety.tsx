@@ -1,5 +1,9 @@
 import React from "react";
+import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { useLang } from "@/hooks/useLang";
+import { SUPPORTED_LANGS } from "@/i18n";
 import { Shield, EyeOff, Trash2, MapPin, Network } from "lucide-react";
 
 const guides = [
@@ -26,8 +30,21 @@ const guides = [
 ];
 
 export default function Safety() {
+  const { t } = useTranslation();
+  const { lang } = useLang();
   return (
     <Layout>
+      <Helmet>
+        <title>{t("seo.safetyTitle")}</title>
+        <meta name="description" content={t("seo.safetyDesc")} />
+        <link rel="canonical" href={`https://silentwi.com/${lang}/safety`} />
+        <meta property="og:title" content={t("seo.safetyTitle")} />
+        <meta property="og:description" content={t("seo.safetyDesc")} />
+        <meta name="twitter:card" content="summary" />
+        {SUPPORTED_LANGS.map((l) => (
+          <link key={l} rel="alternate" hrefLang={l} href={`https://silentwi.com/${l}/safety`} />
+        ))}
+      </Helmet>
       <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
         <div className="mb-8 sm:mb-12">
           <h1 className="text-2xl sm:text-3xl font-serif text-primary tracking-tight mb-3 flex items-center gap-2 sm:gap-3">

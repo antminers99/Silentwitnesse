@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://silentwi.com/sitemap.xml
+
+# Silent Witness — privacy-first evidence fingerprinting
+# No tracking. No file uploads. Fingerprint-only.
