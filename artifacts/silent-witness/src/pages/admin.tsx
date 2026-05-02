@@ -21,6 +21,7 @@ import {
   Loader2,
   RefreshCw,
   Lock,
+  LogOut,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -353,7 +354,7 @@ function RecordCard({
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
-function Dashboard({ password }: { password: string }) {
+function Dashboard({ password, onSignOut }: { password: string; onSignOut: () => void }) {
   const [tab, setTab] = useState("pending_review");
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -416,6 +417,14 @@ function Dashboard({ password }: { password: string }) {
               <RefreshCw className="w-4 h-4" />
             )}
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSignOut}
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
@@ -473,20 +482,34 @@ function Dashboard({ password }: { password: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const SESSION_KEY = "sw_admin_pw";
+
 export default function AdminReview() {
-  const [password, setPassword] = useState<string | null>(null);
+  const [password, setPassword] = useState<string | null>(() => {
+    try { return sessionStorage.getItem(SESSION_KEY); } catch { return null; }
+  });
+
+  const handleAuth = (pw: string) => {
+    try { sessionStorage.setItem(SESSION_KEY, pw); } catch { /* ignore */ }
+    setPassword(pw);
+  };
+
+  const handleSignOut = () => {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+    setPassword(null);
+  };
 
   if (!password) {
     return (
       <Layout>
-        <PasswordGate onAuth={setPassword} />
+        <PasswordGate onAuth={handleAuth} />
       </Layout>
     );
   }
 
   return (
     <Layout>
-      <Dashboard password={password} />
+      <Dashboard password={password} onSignOut={handleSignOut} />
     </Layout>
   );
 }
