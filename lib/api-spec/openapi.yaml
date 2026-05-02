@@ -337,10 +337,6 @@ components:
           type: ["string", "null"]
         safeDescriptor:
           $ref: "#/components/schemas/SafeDescriptor"
-        status:
-          type: string
-        qualityLevel:
-          type: string
         publicWarning:
           type: string
         createdAtLocal:
@@ -359,8 +355,6 @@ components:
         - packageHash
         - eventType
         - evidenceType
-        - status
-        - qualityLevel
         - publicWarning
         - createdAtLocal
 

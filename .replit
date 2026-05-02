@@ -37,3 +37,8 @@ externalPort = 4200
 [[ports]]
 localPort = 18661
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+PUBLIC_APP_ORIGIN = "https://silentwi.com,https://silent-wi.replit.app"

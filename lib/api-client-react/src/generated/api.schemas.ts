@@ -169,8 +169,6 @@ export interface CreateRecordBody {
   /** @nullable */
   city?: string | null;
   safeDescriptor?: SafeDescriptor;
-  status: string;
-  qualityLevel: string;
   publicWarning: string;
   /** ISO-8601 timestamp from the user's device clock at fingerprint creation time. Stored as-is; not treated as authoritative.
    */

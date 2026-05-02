@@ -188,8 +188,6 @@ export const CreateRecordBody = zod
       .describe(
         "Confirmed safe metadata about the evidence file. Only include fields that can be extracted with confidence. Omit uncertain fields entirely.\n",
       ),
-    status: zod.string(),
-    qualityLevel: zod.string(),
     publicWarning: zod.string(),
     createdAtLocal: zod
       .string()

@@ -159,21 +159,27 @@ export default function CreateRecord() {
           try {
             const exifr = await import("exifr");
             const exif = await exifr.parse(file, { gps: true, tiff: true });
-            descriptor.gpsMetadataDetected = !!(exif?.latitude || exif?.longitude || exif?.GPSLatitude)
-              ? "yes"
-              : "no";
-            descriptor.exifMetadataDetected = "yes";
+            // Only record GPS if tags are clearly present
+            if (exif?.latitude || exif?.longitude || exif?.GPSLatitude) {
+              descriptor.gpsMetadataDetected = "yes";
+            }
+            // Only record EXIF if actual fields beyond GPS were found
+            const exifKeys = exif ? Object.keys(exif).filter((k) => !["latitude","longitude","GPSLatitude","GPSLongitude","GPSAltitude"].includes(k)) : [];
+            if (exifKeys.length > 0) {
+              descriptor.exifMetadataDetected = "yes";
+            }
+            // Resolution bucket from pixel count
             const img = new Image();
-            img.src = URL.createObjectURL(file);
-            await new Promise((res) => {
-              img.onload = res;
-              img.onerror = res;
-            });
+            const objUrl = URL.createObjectURL(file);
+            img.src = objUrl;
+            await new Promise((res) => { img.onload = res; img.onerror = res; });
+            URL.revokeObjectURL(objUrl);
             if (img.width && img.height) {
-              descriptor.resolutionBucket = `${img.width}x${img.height}`;
+              const mp = (img.width * img.height) / 1_000_000;
+              descriptor.resolutionBucket = mp < 1 ? "low" : mp <= 8 ? "medium" : "high";
             }
           } catch {
-            // EXIF/GPS detection failed — omit both fields (uncertain)
+            // EXIF/GPS detection failed — omit all uncertain fields
           }
         } else if (file.type.startsWith("video/")) {
           try {
@@ -309,11 +315,23 @@ export default function CreateRecord() {
 
   const copyPublicRecord = () => {
     if (!manifest) return;
-    const pub = { ...manifest };
-    delete pub.privateNote;
-    delete pub.retractionToken; // never share raw retraction token publicly
+    // Safe public summary — excludes all private or sensitive fields.
+    // fileHashes, sizeBytes, nameHash, retractionToken, privateNote, and
+    // raw manifest internals must never appear in the public copy.
+    const loc = manifest.location as { country: string; region: string; city: string } | undefined;
+    const pub = {
+      packageHash: manifest.packageHash,
+      eventType: manifest.eventType,
+      evidenceType: manifest.evidenceType,
+      country: loc?.country ?? null,
+      region: loc?.region ?? null,
+      city: loc?.city ?? null,
+      safeDescriptor: manifest.safeDescriptor ?? null,
+      createdAtLocal: manifest.createdAtLocal,
+      publicWarning: manifest.publicWarning,
+    };
     navigator.clipboard.writeText(JSON.stringify(pub, null, 2));
-    toast({ title: "Copied", description: "Public record copied to clipboard." });
+    toast({ title: "Copied", description: "Public record summary copied to clipboard." });
   };
 
   const openSubmitDialog = () => {
@@ -340,8 +358,6 @@ export default function CreateRecord() {
           region: loc.region !== "withheld" ? loc.region : null,
           city: loc.city !== "withheld" ? loc.city : null,
           safeDescriptor: pub.safeDescriptor as object,
-          status: String(pub.status),
-          qualityLevel: recordType === "package" ? "A" : recordType === "file" ? "B" : "C",
           publicWarning: String(pub.publicWarning),
           createdAtLocal: String(pub.createdAtLocal),
           retractionTokenHash: retractionTokenHash ?? null,

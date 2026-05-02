@@ -64,13 +64,26 @@ function computeQualityLevel(body: {
   evidenceType: string;
   safeDescriptor?: unknown;
 }): string {
-  const hasDescriptor =
+  const descriptorEntries =
     body.safeDescriptor &&
-    typeof body.safeDescriptor === "object" &&
-    Object.values(body.safeDescriptor as Record<string, unknown>).some((v) => v != null);
-  if (body.evidenceType !== "withheld" && body.eventType !== "withheld" && hasDescriptor)
-    return "A";
-  if (body.evidenceType !== "withheld" && hasDescriptor) return "B";
+    typeof body.safeDescriptor === "object"
+      ? Object.entries(body.safeDescriptor as Record<string, unknown>).filter(
+          ([k, v]) => v != null && k !== "mediaType"
+        )
+      : [];
+  const hasDescriptor = descriptorEntries.length > 0;
+
+  // D: both withheld with no meaningful descriptor, or no descriptor at all
+  const bothWithheld =
+    body.eventType === "withheld" && body.evidenceType === "withheld";
+  if (bothWithheld && !hasDescriptor) return "D";
+  if (!body.safeDescriptor || !hasDescriptor) return "D";
+
+  // A: known event, known evidence, has descriptor
+  if (body.evidenceType !== "withheld" && body.eventType !== "withheld") return "A";
+  // B: known evidence or known event, has descriptor
+  if (body.evidenceType !== "withheld" || body.eventType !== "withheld") return "B";
+  // C: both withheld but has some descriptor
   return "C";
 }
 
@@ -266,6 +279,14 @@ router.post("/records", async (req, res): Promise<void> => {
   // Quality level is always computed server-side. Client-provided qualityLevel is ignored.
   const qualityLevel = computeQualityLevel(body);
 
+  if (qualityLevel === "D") {
+    res.status(400).json({
+      error:
+        "Low-quality records can be saved locally but are not accepted into the public registry. Please provide at least an event type, evidence type, and a descriptor.",
+    });
+    return;
+  }
+
   const [record] = await db
     .insert(witnessRecordsTable)
     .values({
@@ -277,7 +298,7 @@ router.post("/records", async (req, res): Promise<void> => {
       region: body.region ?? null,
       city: body.city ?? null,
       safeDescriptor: (body.safeDescriptor as object) ?? null,
-      status: body.status ?? "timestamped_only_not_verified",
+      status: "timestamped_only_not_verified",
       qualityLevel,
       publicWarning: body.publicWarning,
       createdAtLocal: body.createdAtLocal,
@@ -294,6 +315,8 @@ router.post("/records", async (req, res): Promise<void> => {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // GET /records/:packageHash
+// Only exposes public records. Non-public records return 404 to avoid leaking
+// metadata for records that are pending, rejected, or retracted.
 // ──────────────────────────────────────────────────────────────────────────────
 router.get("/records/:packageHash", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.packageHash)
@@ -313,6 +336,11 @@ router.get("/records/:packageHash", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!record) {
+    res.status(404).json({ error: "Record not found." });
+    return;
+  }
+
+  if (!PUBLIC_STATUSES.includes(record.publicationStatus)) {
     res.status(404).json({ error: "Record not found." });
     return;
   }
