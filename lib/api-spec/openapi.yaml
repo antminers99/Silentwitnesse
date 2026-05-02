@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Silent Witness API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: records
+    description: Public witness record operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,129 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /records:
+    get:
+      operationId: listRecords
+      tags: [records]
+      summary: List public witness records
+      parameters:
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: region
+          in: query
+          schema:
+            type: string
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: eventType
+          in: query
+          schema:
+            type: string
+        - name: evidenceType
+          in: query
+          schema:
+            type: string
+        - name: qualityLevel
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of public records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListRecordsResponse"
+
+    post:
+      operationId: createRecord
+      tags: [records]
+      summary: Submit a public witness record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRecordBody"
+      responses:
+        "201":
+          description: Record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WitnessRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Duplicate record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /records/{packageHash}:
+    get:
+      operationId: getRecord
+      tags: [records]
+      summary: Get a public witness record by package hash
+      parameters:
+        - name: packageHash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WitnessRecord"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /records/stats:
+    get:
+      operationId: getRecordStats
+      tags: [records]
+      summary: Get aggregate stats about the public registry
+      responses:
+        "200":
+          description: Registry statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistryStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +159,156 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SafeDescriptor:
+      type: object
+      properties:
+        mediaType:
+          type: ["string", "null"]
+        durationBucket:
+          type: ["string", "null"]
+        resolutionBucket:
+          type: ["string", "null"]
+        fileSizeBucket:
+          type: ["string", "null"]
+        wordCount:
+          type: ["integer", "null"]
+        language:
+          type: ["string", "null"]
+        gpsMetadata:
+          type: ["string", "null"]
+        exifMetadata:
+          type: ["string", "null"]
+
+    WitnessRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        packageHash:
+          type: string
+        eventType:
+          type: string
+        evidenceType:
+          type: string
+        country:
+          type: ["string", "null"]
+        region:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        safeDescriptor:
+          $ref: "#/components/schemas/SafeDescriptor"
+        status:
+          type: string
+        qualityLevel:
+          type: string
+        publicWarning:
+          type: string
+        createdAtUtc:
+          type: string
+        isDemo:
+          type: boolean
+      required:
+        - id
+        - packageHash
+        - eventType
+        - evidenceType
+        - status
+        - qualityLevel
+        - publicWarning
+        - createdAtUtc
+        - isDemo
+
+    ListRecordsResponse:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/WitnessRecord"
+        total:
+          type: integer
+      required:
+        - records
+        - total
+
+    CreateRecordBody:
+      type: object
+      properties:
+        packageHash:
+          type: string
+        eventType:
+          type: string
+        evidenceType:
+          type: string
+        country:
+          type: ["string", "null"]
+        region:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        safeDescriptor:
+          $ref: "#/components/schemas/SafeDescriptor"
+        status:
+          type: string
+        qualityLevel:
+          type: string
+        publicWarning:
+          type: string
+        createdAtUtc:
+          type: string
+        honeypot:
+          type: ["string", "null"]
+      required:
+        - packageHash
+        - eventType
+        - evidenceType
+        - status
+        - qualityLevel
+        - publicWarning
+        - createdAtUtc
+
+    RegistryStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        byEventType:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountByKey"
+        byCountry:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountByKey"
+        byQualityLevel:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountByKey"
+        recentCount:
+          type: integer
+      required:
+        - total
+        - byEventType
+        - byCountry
+        - byQualityLevel
+        - recentCount
+
+    CountByKey:
+      type: object
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+      required:
+        - key
+        - count

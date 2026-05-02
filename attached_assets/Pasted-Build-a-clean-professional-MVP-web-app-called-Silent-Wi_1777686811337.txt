@@ -1,0 +1,354 @@
+Build a clean, professional MVP web app called “Silent Witness”.
+
+Purpose:
+Silent Witness is a privacy-first evidence fingerprinting tool. It lets a user create a cryptographic fingerprint for a photo, video, audio file, document, or written testimony without uploading the original evidence. The user may optionally publish only the fingerprint and safe public metadata. The app must never claim that an event is proven. It only proves that a matching file/text existed before a certain timestamp if the original is later provided.
+
+Important tone:
+- No hype.
+- No AI branding.
+- No dramatic visuals.
+- No fake claims.
+- Simple, trustworthy, human-rights-documentation style.
+- Minimal, elegant, mobile-first design.
+- English UI only.
+- Make it look credible, not flashy.
+
+Tech stack:
+Use React + Vite + TypeScript.
+Use a small Express backend with SQLite only for public records.
+Use Tailwind CSS or clean CSS.
+Use Web Crypto API in the browser for SHA-256 hashing.
+Use a client-side EXIF library such as ExifReader or exifr to detect metadata/GPS locally.
+Do not upload evidence files to the server.
+The server stores only public records submitted by the user: hashes and safe metadata.
+
+Core rule:
+Files must be processed locally in the browser. Original images, videos, audio, and documents must never be sent to the backend.
+
+Pages needed:
+
+1. Home page /
+Purpose:
+A short explanation of the tool.
+
+Content:
+Title: Silent Witness
+Subtitle: Preserve proof without publishing danger.
+Explain in simple language:
+- Choose a file or write testimony.
+- The browser creates a fingerprint locally.
+- The original stays on your device.
+- You may save the proof package or publish only the fingerprint.
+- A fingerprint is not proof of guilt or truth. It is a timestamped reference for later verification.
+
+Primary buttons:
+- Create a Witness Record
+- Verify Evidence
+- Read the Protocol
+
+2. Protocol page /protocol
+This page is the English protocol paper.
+Use clear sections:
+- What Silent Witness is
+- What problem it solves
+- Design principles
+- What a witness record contains
+- What it proves
+- What it does not prove
+- Privacy rules
+- Geographic safety rules
+- Spam and false-claim handling
+- Safe evidence descriptor
+- Verification process
+- Public wording rules
+
+Important wording:
+Do not say “verified kidnapping” or “proven crime”.
+Say:
+“Timestamped fingerprint”
+“Original evidence not published”
+“Not publicly verified”
+“Can be checked later if the original is provided”
+
+Add this exact warning box:
+“Silent Witness does not prove that an event happened. It proves only that a matching file, text, or evidence package existed before a recorded time, if the original is later provided.”
+
+3. Create Witness Record page /create
+This is the main tool.
+
+Layout:
+A simple 3-step flow.
+
+Step 1: Choose record type
+Buttons:
+- File evidence
+- Written testimony
+- Evidence package
+
+File evidence:
+User selects one or multiple files.
+Calculate SHA-256 for each file locally.
+For images:
+- Read EXIF locally.
+- Detect whether GPS metadata exists.
+- Detect whether camera/device metadata exists.
+- Do not display exact GPS coordinates.
+- Display only:
+  GPS metadata: present / absent / unknown
+  EXIF metadata: present / absent / stripped / unknown
+  Image dimensions
+  File size bucket: small / medium / large
+For videos:
+- Use browser video metadata if possible.
+- Display duration bucket:
+  0–5s, 5–15s, 15–60s, 1–5min, >5min
+- Display resolution if available.
+- Display file size bucket.
+For text testimony:
+- User writes text in a textarea.
+- Calculate SHA-256 of the exact text.
+- Count words.
+- Detect language roughly: Arabic / English / mixed / unknown.
+- Warn if the text contains phone numbers, GPS-like coordinates, or too many named entities.
+No AI is needed. Use simple regex warnings.
+
+Step 2: Safe public context
+Fields:
+- Event type: kidnapping, killing, detention, threat, theft, assault, displacement, other, withheld
+- Evidence type: video, image, audio, document, written testimony, package, withheld
+- Country: optional but encouraged
+- Region / province: optional
+- City: optional
+- Public note: optional
+
+Safety rules:
+- Do not allow street address field.
+- Do not allow GPS field.
+- Do not ask for victim name, witness name, suspect name, phone number, or exact location.
+- If the public note includes phone numbers, exact coordinates, very long personal names, vehicle plates, or phrases like “go kill”, show a red warning and do not allow public submission until the user edits it or marks it private.
+- Let the user keep unsafe notes private in the downloaded proof package, but never submit them publicly.
+
+Step 3: Generate record
+Create a manifest JSON object like:
+
+{
+  "protocol": "silent-witness-v0.1",
+  "recordType": "file_hash | testimony_hash | package_hash",
+  "eventType": "...",
+  "evidenceType": "...",
+  "privacy": "details_withheld",
+  "location": {
+    "country": "...",
+    "region": "...",
+    "city": "..."
+  },
+  "safeDescriptor": {
+    "mediaType": "...",
+    "durationBucket": "...",
+    "resolutionBucket": "...",
+    "fileSizeBucket": "...",
+    "wordCount": "...",
+    "language": "...",
+    "gpsMetadata": "present | absent | unknown",
+    "exifMetadata": "present | absent | unknown"
+  },
+  "fileHashes": [
+    {
+      "nameHash": "sha256 of filename only, do not publish raw filename",
+      "mimeType": "...",
+      "sizeBytes": 123,
+      "sha256": "..."
+    }
+  ],
+  "packageHash": "sha256 of canonical JSON manifest without signature",
+  "createdAtUtc": "...",
+  "status": "timestamped_only_not_verified",
+  "publicWarning": "Original evidence is not shared. This record does not prove guilt or truth."
+}
+
+Do not include raw filenames in the public record.
+Show:
+- Main fingerprint / package hash
+- Individual file hashes
+- Privacy warnings
+- Verification instructions
+
+Buttons:
+- Download proof package JSON
+- Copy public record
+- Share fingerprint to Telegram
+- Submit public fingerprint to registry
+
+Telegram share:
+Use https://t.me/share/url
+Only share safe text:
+Silent Witness Record
+Event type: ...
+Evidence type: ...
+Location: country / region / city if provided
+Details: withheld for safety
+Package hash: ...
+Status: timestamped only, not publicly verified
+Original evidence is not shared.
+
+4. Public Registry page /records
+This page displays public submitted fingerprints only.
+Table columns:
+- Date
+- Event type
+- Evidence type
+- Country
+- Region
+- City
+- Package hash short form
+- Status
+- Quality level
+
+Quality levels:
+A: package with file evidence + safe descriptor + event type
+B: file evidence + safe descriptor
+C: testimony or minimal metadata
+D: low value / hidden by default
+
+Do not show D by default.
+Add filters:
+- Country
+- Region
+- City
+- Event type
+- Evidence type
+- Status
+- Quality
+
+Important:
+Every record must show:
+“Not publicly verified”
+unless a matching published evidence file was later verified.
+
+No maps in MVP.
+No precise locations.
+No victim names.
+No accusations.
+
+5. Verify Evidence page /verify
+Purpose:
+Let anyone check whether a published file or text matches an old fingerprint.
+
+Features:
+- Upload/select file locally.
+- Calculate SHA-256 locally.
+- Paste expected hash or upload manifest JSON.
+- Show:
+  Exact match ✅
+  No match ❌
+  Partial/package check if manifest includes multiple files.
+
+If a manifest is uploaded:
+- Show protocol version.
+- Show package hash.
+- Recompute hash if possible.
+- For individual files, compare selected file hash with fileHashes array.
+
+Use careful wording:
+“Exact cryptographic match”
+not
+“true” or “fake”.
+
+6. About / Safety page /safety
+Simple safety guide:
+- Do not upload evidence to unknown servers.
+- Keep originals safe.
+- A fingerprint cannot recover a deleted file.
+- If you delete the original and have no encrypted backup, the fingerprint alone cannot show the content.
+- Public notes must not include names, exact places, or accusations.
+- Use broader locations only.
+- If publishing may put someone at risk, save locally only.
+
+Backend:
+Use Express + SQLite.
+Endpoints:
+POST /api/records
+GET /api/records
+GET /api/records/:hash
+
+POST /api/records should accept only safe public metadata:
+- packageHash
+- eventType
+- evidenceType
+- country
+- region
+- city
+- safeDescriptor
+- status
+- qualityLevel
+- createdAtUtc
+- publicWarning
+
+Reject:
+- raw files
+- base64 files
+- phone numbers in publicNote
+- GPS coordinates in publicNote
+- exact street addresses
+- names fields
+- overly long public notes
+- violent or inciting language
+
+Add simple spam controls:
+- Do not allow same packageHash twice.
+- Rate limit submissions lightly.
+- Quality D records are stored but hidden by default, or simply not accepted in MVP.
+- Add honeypot field in the form for bots.
+- Add client-side proof-of-work placeholder optional but do not overcomplicate.
+
+Frontend design:
+- Clean white/neutral background.
+- Use restrained colors.
+- No animations except tiny transitions.
+- Big readable text.
+- Mobile-first.
+- Cards with clear warnings.
+- Use labels like:
+  “Original stays on your device”
+  “No file upload”
+  “Fingerprint only”
+  “Not verified truth”
+
+Important UX:
+On Create page, after file selection, show a clear local-processing banner:
+“Processing locally. Your file is not uploaded.”
+
+Add a network/privacy note:
+“This app sends only the public record if you press Submit. It never sends the original evidence file.”
+
+Do not include Google Analytics or tracking.
+Do not require login.
+Do not use AI APIs.
+Do not use blockchain in this MVP.
+Add placeholder architecture note:
+“Future versions may anchor daily Merkle roots to OpenTimestamps or a public blockchain. This MVP does not do that yet.”
+
+Deliverables:
+- Fully working Replit app.
+- README.md explaining:
+  setup
+  privacy model
+  limitations
+  what is stored
+  what is never stored
+  how verification works
+- Seed database optional with 3 fake demo records clearly marked DEMO.
+- Make sure demo records cannot be mistaken for real records.
+
+Critical disclaimers throughout:
+1. “A fingerprint is not proof that an event happened.”
+2. “A fingerprint cannot recover deleted evidence.”
+3. “Do not publish details that could endanger a witness, victim, or family.”
+4. “The original evidence must be kept safely by the holder.”
+
+Build the MVP now.
+Keep it simple.
+No unnecessary pages.
+No fake authority.
+No claims of legal certification.
+No dramatic copy.
