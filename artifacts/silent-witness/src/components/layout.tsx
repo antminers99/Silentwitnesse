@@ -14,6 +14,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [langOpen, setLangOpen] = useState(false);
 
   const navLinks = [
+    { path: "/how-it-works", label: t("nav.howItWorks") },
     { path: "/create", label: t("nav.create") },
     { path: "/verify", label: t("nav.verify") },
     { path: "/records", label: t("nav.registry") },
