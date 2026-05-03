@@ -27,6 +27,11 @@ const guides = [
     title: "Your private note stays on your device",
     body: 'The private note field is never submitted to the registry — it lives only in your downloaded proof package. Even so, avoid writing full names, phone numbers, exact addresses, or GPS coordinates in it, in case the file is ever accessed by others.',
   },
+  {
+    icon: <Network className="w-5 h-5 text-primary flex-shrink-0" />,
+    title: "What if I send the video through WhatsApp or upload it to Facebook?",
+    body: "Many platforms compress or re-encode media. That can change the file fingerprint. For exact verification, keep the original file or the exact safe copy created at the time of fingerprinting — not a version downloaded from another platform.",
+  },
 ];
 
 export default function Safety() {

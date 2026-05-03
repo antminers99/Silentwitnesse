@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, ShieldCheck, Search, BookOpen } from "lucide-react";
+import { ArrowRight, ShieldCheck, Search, BookOpen, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLang } from "@/hooks/useLang";
 import { SUPPORTED_LANGS } from "@/i18n";
@@ -107,6 +107,33 @@ export default function Home() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* How verification works */}
+        <div className="mt-8 sm:mt-10 border border-border rounded-lg p-5 sm:p-6 space-y-4">
+          <h2 className="text-base sm:text-lg font-semibold text-foreground">
+            How verification works
+          </h2>
+          <ol className="space-y-2 text-sm text-muted-foreground leading-relaxed list-decimal list-inside">
+            <li>A user creates a fingerprint from the original file.</li>
+            <li>The original file stays with the user.</li>
+            <li>Silent Witness records the fingerprint and registry time.</li>
+            <li>Later, if the original file is safely shared, anyone can select that file on the Verify page.</li>
+            <li>The browser calculates the fingerprint again.</li>
+            <li>If the new fingerprint matches the old one, the later file is exactly the same file that was fingerprinted earlier.</li>
+          </ol>
+          <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-3">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <span>This proves a file match, not that the event happened.</span>
+          </div>
+          <div className="bg-muted/60 border border-border rounded p-4 text-xs font-mono text-muted-foreground leading-relaxed space-y-0.5">
+            <div>Original file</div>
+            <div className="ps-2">→ fingerprint created locally</div>
+            <div className="ps-2">→ fingerprint stored in registry</div>
+            <div className="ps-2">→ later file selected</div>
+            <div className="ps-2">→ fingerprint calculated again</div>
+            <div className="ps-2">→ match / no match</div>
           </div>
         </div>
 

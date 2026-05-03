@@ -232,7 +232,7 @@ function ResultPanel({ result }: { result: MatchResult }) {
         )}
         <h4 className="text-base sm:text-lg font-semibold">
           {result.kind === "match" && "Exact cryptographic match"}
-          {result.kind === "no-match" && "No match"}
+          {result.kind === "no-match" && "No exact match"}
           {result.kind === "manifest-valid" && "Manifest integrity confirmed"}
           {result.kind === "manifest-tampered" && "Manifest has been altered"}
           {result.kind === "error" && "Verification error"}
@@ -240,22 +240,33 @@ function ResultPanel({ result }: { result: MatchResult }) {
       </div>
 
       {result.kind === "match" && (
-        <div className="text-sm space-y-1 text-muted-foreground">
-          <p>The file matches the recorded fingerprint.</p>
+        <div className="text-sm space-y-2 text-muted-foreground">
+          <p className="font-medium text-foreground">
+            This file is byte-for-byte identical to the fingerprinted file or safe copy.
+          </p>
           <p>
             Verified against:{" "}
             <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
               {result.label}
             </span>
           </p>
+          <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-3 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-amber-800 dark:text-amber-300">
+              This does not prove the event happened. It only proves the file matches the earlier fingerprint.
+            </span>
+          </div>
         </div>
       )}
 
       {result.kind === "no-match" && (
         <div className="text-sm space-y-3 text-muted-foreground">
           <p>
-            This file does not exactly match the stored hash. It may be a different file, or it
-            may have been compressed or exported by another platform.
+            This may mean the file is different, or that it was compressed, exported, edited,
+            or changed by another platform.
+          </p>
+          <p className="text-xs">
+            Exact verification requires the original file or an exact safe copy.
           </p>
           <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
@@ -761,6 +772,32 @@ export default function Verify() {
           <p className="text-base sm:text-lg text-muted-foreground">
             Confirm a file matches its recorded fingerprint — locally, without uploading.
           </p>
+        </div>
+
+        {/* Why this is reproducible */}
+        <div className="mb-6 border border-border rounded-lg p-4 sm:p-5 space-y-3 bg-muted/30">
+          <h2 className="text-sm font-semibold text-foreground">Why this is reproducible</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            The same file always creates the same SHA-256 fingerprint. If even one byte changes,
+            the fingerprint changes. This means anyone with the original file can repeat the
+            check independently.
+          </p>
+          <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-3">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <span>
+              If the file was compressed, exported, edited, or sent through another platform,
+              the exact fingerprint may change.
+            </span>
+          </div>
+          {/* Text diagram */}
+          <div className="bg-muted border border-border rounded p-3 text-xs font-mono text-muted-foreground leading-relaxed space-y-0.5">
+            <div>Original file</div>
+            <div className="ps-2">→ fingerprint created locally</div>
+            <div className="ps-2">→ fingerprint stored in registry</div>
+            <div className="ps-2">→ later file selected</div>
+            <div className="ps-2">→ fingerprint calculated again</div>
+            <div className="ps-2">→ match / no match</div>
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-lg shadow-sm p-4 sm:p-6 lg:p-8">

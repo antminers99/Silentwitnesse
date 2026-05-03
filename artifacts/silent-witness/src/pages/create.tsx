@@ -777,6 +777,21 @@ export default function CreateRecord() {
               </div>
             )}
 
+            {/* What you must keep */}
+            <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                What you must keep
+              </h3>
+              <ul className="text-xs text-amber-800 dark:text-amber-300 space-y-1 leading-relaxed list-disc list-inside">
+                <li>Keep the original file.</li>
+                <li>Keep the downloaded proof package.</li>
+                <li>Keep the retraction token if you submit publicly.</li>
+                <li>A fingerprint cannot recover a deleted file.</li>
+                <li>If the original is compressed or changed, exact matching may fail.</li>
+              </ul>
+            </div>
+
             <div className="text-center text-xs sm:text-sm text-muted-foreground pt-2">
               Silent Witness may help show that a matching file, text, or evidence package
               existed before a recorded time. It does not prove that an event happened,

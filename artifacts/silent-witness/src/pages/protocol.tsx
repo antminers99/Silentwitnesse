@@ -242,6 +242,36 @@ export default function Protocol() {
             match.
           </p>
 
+          <h2>Reproducibility</h2>
+          <p>
+            The verification process is fully repeatable. The registry does not need
+            access to the original file at any point. Anyone with the original file
+            and the public fingerprint can reproduce the check independently.
+          </p>
+          <p>
+            SHA-256 is deterministic: the same exact file always produces the same
+            fingerprint. Any modification — including compression, re-encoding, or
+            platform processing — produces a completely different fingerprint. This
+            means exact verification requires the same exact file or an unmodified safe copy.
+          </p>
+          <p>
+            This only establishes file equality, not factual truth. A byte-for-byte match
+            confirms the file is the same file that was fingerprinted. It does not confirm
+            the contents are true, who created the file, or that any described event occurred.
+          </p>
+          <p>
+            <strong>Example:</strong> A witness fingerprints <code>video.mp4</code> today.
+            The registry records the fingerprint. A month later, the witness shares{" "}
+            <code>video.mp4</code>. A reviewer calculates the fingerprint again.
+            If it matches, the file is the same file that was fingerprinted earlier.
+          </p>
+          <p>
+            <strong>Caution:</strong> If the video was sent through WhatsApp, Telegram,
+            Facebook, YouTube, or another platform, the file may be re-encoded and the
+            exact fingerprint may not match. Always keep the original file or an exact
+            safe copy created at the time of fingerprinting.
+          </p>
+
           <h2>Public wording rules</h2>
           <p>When citing Silent Witness records, the following terminology must be used:</p>
           <ul>
